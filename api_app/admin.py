@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Interface, TestItem
+from .models import DB_Interface, DB_TestItem
 
-admin.site.register(Interface)
-admin.site.register(TestItem)
+admin.site.register(DB_Interface)
+admin.site.register(DB_TestItem)

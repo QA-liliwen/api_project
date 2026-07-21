@@ -16,7 +16,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from api_app.views_test_item import *
+from api_app.api_test.api_single_runner import *
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api_list/', api_list),
+    path('upload_case/', upload_case),
+    path('run_main/', run_main),
 ]

@@ -1,8 +1,9 @@
 from django.db import models
 
 
-class Interface(models.Model):
-    """接口元数据"""
+# 接口数据
+class DB_Interface(models.Model):
+    id = models.IntegerField('序号', default=0, primary_key=True)
     name = models.CharField('接口名称', max_length=200)
     url = models.CharField('请求URL', max_length=500)
     method = models.CharField('请求方法', max_length=10)
@@ -17,21 +18,15 @@ class Interface(models.Model):
         verbose_name_plural = '接口'
 
     def __str__(self):
-        return f"{self.name} ({self.method} {self.url})"
+        return f"{self.name} ({self.url})"
 
-
-class TestItem(models.Model):
-    """测试项 - 关联接口 + 用例/脚本"""
-    TYPE_CHOICES = [
-        (1, '单接口用例'),
-        (2, '多接口编排'),
-        (3, '自定义脚本'),
-    ]
+# 测试项
+class DB_TestItem(models.Model):
+    id = models.CharField('id', max_length=200, primary_key=True)
     name = models.CharField('测试项名称', max_length=200, unique=True)
-    type = models.IntegerField('项目类型', choices=TYPE_CHOICES, default=1)
-    interface = models.ForeignKey(Interface, on_delete=models.CASCADE,
-        related_name='test_items', verbose_name='关联接口')
-    excel_file = models.FileField('Excel用例文件', upload_to='test_cases/', blank=True)
+    type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '多接口编排'), (3, '自定义脚本')], default=1)
+    interface = models.IntegerField('关联接口号', default=0)
+    cases = models.JSONField("用例数据", default=list, blank=True)
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -41,5 +36,15 @@ class TestItem(models.Model):
         verbose_name_plural = '测试项'
 
     def __str__(self):
-        return f"{self.name} ({self.get_type_display()})"
+        return f"{self.name}"
 
+class DB_TestRun(models.Model):
+    test_items = models.CharField("测试项ID", max_length=500)
+    description = models.TextField('描述', blank=True)
+    status = models.CharField("状态", max_length=20, default="running")
+    total = models.IntegerField("总用例数", null=True, blank=True)
+    passed = models.IntegerField("通过", null=True, blank=True)
+    failed = models.IntegerField("失败", null=True, blank=True)
+    skipped = models.IntegerField("跳过", null=True, blank=True)
+    jenkins_build_url = models.CharField("Jenkins构建链接", max_length=500)
+    started_at = models.DateTimeField("开始时间", auto_now_add=True)
