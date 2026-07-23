@@ -1,3 +1,5 @@
+import time
+import datetime
 import json
 import os
 import subprocess
@@ -38,8 +40,7 @@ def upload_case(request):
     test_item = DB_TestItem.objects.get(id=upload_item_id)
     # 存文件
     upload_xlsx_name = f"{upload_item_id}_{test_item.name}.xlsx"
-    save_dir = "api_app/xlsx"
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = "api_app/data/xlsx"
     file_path = os.path.join(save_dir, upload_xlsx_name)
     with open(file_path, "wb+") as f:
         for chunk in file.chunks():
@@ -125,22 +126,52 @@ def build_test_item_cases(test_item_id):
 def run_main(request):
     run_ids = request.POST.get("ids", "")
     run_items = run_ids.split(",")
+    description = ''
+    started_ts = time.time()
+    started_at = datetime.datetime.fromtimestamp(started_ts)
+    test_run = DB_run_result.objects.create(
+        env=ENV,
+        status="running",
+        description=description,
+        test_items=run_ids,
+        started_at=started_at
+    )
+    # print(test_run.id)
 
+    # 获取完整用例
     all_cases = []
     for run_item in run_items:
         cases = build_test_item_cases(run_item)
-        print(json.dumps(cases, ensure_ascii=False, indent=2))
         all_cases.extend(cases)
-    # print(json.dumps(all_cases, ensure_ascii=False, indent=2))
 
+    # 保存用例
+    PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    cases_file = os.path.join(BASE_DIR, "cases.json")
-    with open(cases_file, "w", encoding="utf-8") as f:
+    cases_dir = os.path.join(PROJECT_DIR, "api_app", "data", "cases")
+    cases_txt_name = f"{test_run.id}_cases.txt"
+    cases_txt_path = os.path.join(cases_dir, cases_txt_name)
+    with open(cases_txt_path, "w", encoding="utf-8") as f:
         json.dump(all_cases, f, ensure_ascii=False, indent=2)
-    subprocess.run(["pytest", os.path.join(BASE_DIR, "tests.py"), "-v"],capture_output=True, text=True, cwd=BASE_DIR)
+    test_run.cases_json_file = cases_txt_name
+
+    # 日志文件
+    log_file_name = f"{test_run.id}_app.log"
+    test_run.log_file = log_file_name
+
+    test_run.save()
+
+    pytest_env = os.environ.copy()
+    pytest_env["TEST_RUN_ID"] = str(test_run.id)
+    pytest_env["CASES_FILE"] = cases_txt_path
+    pytest_env["LOG_FILE_NAME"] = log_file_name
+    pytest_env['STARTED_AT'] = str(started_ts)
+    subprocess.Popen(
+        ["pytest", os.path.join(BASE_DIR, "tests.py"), "-v"],
+        env=pytest_env,
+        cwd=BASE_DIR,
+    )
     return HttpResponse('')
 
 
 if __name__ == '__main__':
     pass
-

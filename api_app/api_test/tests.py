@@ -1,12 +1,12 @@
-import json
 import os
 import sys
+import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_request import *
-import pytest
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(BASE_DIR, "cases.json"), "r", encoding="utf-8") as f:
+cases_file = os.environ.get("CASES_FILE")
+
+with open(cases_file, "r", encoding="utf-8") as f:
     cases_data = json.load(f)
 
 @pytest.mark.parametrize(

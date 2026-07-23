@@ -21,7 +21,8 @@ from api_app.api_test.api_single_runner import *
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api_list/', api_list),
-    path('upload_case/', upload_case),
-    path('run_main/', run_main),
+    path('api_list/', api_list),    # 全部接口
+    path('upload_case/', upload_case),  # 上传用例xlsx
+    path('run_main/', run_main),    # 执行测试任务
+    path('update_run_result/', update_run_result)
 ]
