@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+db.sqlite3
+.idea/
+.vscode/
+*.log
+api_app/data/logs/
+api_app/data/cases/
