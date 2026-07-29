@@ -16,20 +16,20 @@ DEFAULT_HEADERS = {
     "DeviceType": "0",
     "AppType": "6",
     "industryType": "Education",
-    "DeviceUniqueId": "ffffffff-edaa-9fe8-0000-0000257b501a-com.lingshi.inst.klxt-PCRT00",
+    "DeviceUniqueId": "d91ed0b9-290c-4700-ad1e-1d619d625e54",
     "InstId": "462821",
     "serverId": "1201",
     "uc": "TYTY_TEST",
     "AppVersion": "4.3.86.177814",
     "lan": "ch",
     "Requestuniqueid": "761948_4367_1699530093582_355",
-    "token": "462821:1846822808:9f1b1039-a9ae-48c1-a15b-be074b585f7c:5f8171499b7b4e7090a0e2238f6cc5a8:1201v",
+    "token": "462821:1848276668:20f80e61-2e0a-461c-b5e8-971253b27c39:1ac8d2da75a73686aee7276efda59e25:1201v",
     "Content-Type": "application/json",
     "FromAppName": "Test-automate",
     "Host": "devapi1.lingshi.com",
     "User-Agent": "Apache-HttpClient/4.5.14 (Java/1.8.0_202)"
 }
-upload_item_id = 3
+upload_item_id = 2
 
 
 # 文件存储
@@ -87,10 +87,7 @@ def read_single_case(file_path: str):
             wb.close()
             return []
 
-        if ";" in row_dict["assertions"]:
-            row_dict["assertions"] = [a.strip() for a in row_dict["assertions"].split(";") if a.strip()]
-        else:
-            row_dict["assertions"] = [row_dict["assertions"].strip()]
+        row_dict["assertions"] = [a.strip() for a in row_dict["assertions"].split(";") if a.strip()]
         data.append(row_dict)
 
     wb.close()
