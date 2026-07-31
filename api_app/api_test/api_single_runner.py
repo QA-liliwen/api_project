@@ -98,7 +98,7 @@ def read_single_case(file_path: str):
 # 合并单个测试项的接口信息和测试用例
 def build_test_item_cases(test_item_id):
     test_item = DB_TestItem.objects.get(id=test_item_id)
-    interface = DB_Interface.objects.get(id=test_item.interface)
+    interface = test_item.interface
     base_url = "https://"+interface.url.format(DOMAIN, ENV)
 
     cases = []

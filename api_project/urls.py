@@ -21,8 +21,11 @@ from api_app.api_test.api_single_runner import *
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api_list/', api_list),    # 全部接口
+    path('update_run_result/', update_run_result),
+    path('get_top_menu/', get_top_menu),    # 顶部一级标签行
+    path('get_second_tags/', get_second_tags),  # 左侧二级标签行
+    path('get_grouped_test_items/', get_grouped_test_items),
+
     path('upload_case/', upload_case),  # 上传用例xlsx
     path('run_main/', run_main),    # 执行测试任务
-    path('update_run_result/', update_run_result)
 ]

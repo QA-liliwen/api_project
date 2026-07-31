@@ -6,3 +6,4 @@ db.sqlite3
 *.log
 api_app/data/logs/
 api_app/data/cases/
+node_modules/

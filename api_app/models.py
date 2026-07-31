@@ -3,7 +3,6 @@ from django.db import models
 
 # 接口数据
 class DB_Interface(models.Model):
-    id = models.IntegerField('序号', default=0, primary_key=True)
     name = models.CharField('接口名称', max_length=200)
     url = models.CharField('请求URL', max_length=500)
     method = models.CharField('请求方法', max_length=10)
@@ -12,6 +11,7 @@ class DB_Interface(models.Model):
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    sort = models.IntegerField('序号', null=True, blank=True, default=0)
 
     class Meta:
         verbose_name = '1_接口表'
@@ -25,12 +25,14 @@ class DB_Interface(models.Model):
 class DB_TestItem(models.Model):
     id = models.CharField('id', max_length=200, primary_key=True)
     name = models.CharField('测试项名称', max_length=200, unique=True)
+    second_tag = models.ForeignKey('DB_SecondTag', verbose_name='二级标签', on_delete=models.SET_NULL, null=True, blank=True)
     type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '多接口编排'), (3, '自定义脚本')], default=1)
-    interface = models.IntegerField('关联接口号', default=0)
+    interface = models.ForeignKey('DB_Interface', verbose_name='关联接口', on_delete=models.SET_NULL, null=True, blank=True)
     cases = models.JSONField("用例数据", default=list, blank=True)
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    sort = models.IntegerField("序号", null=True, blank=True)
 
     class Meta:
         verbose_name = '2_测试项表'
@@ -69,3 +71,89 @@ class DB_run_result(models.Model):
 
     def __str__(self):
         return f"{self.id} {self.description} {self.test_items}"
+
+
+# 一级标签
+class DB_FirstTag(models.Model):
+    name = models.CharField('一级标签名称', max_length=100, unique=True)
+    is_del = models.BooleanField('是否删除', default=False)
+    sort = models.IntegerField("序号", null=True, blank=True)
+
+    class Meta:
+        verbose_name = '4_一级标签'
+        verbose_name_plural = '4_一级标签'
+
+    def __str__(self):
+        return f"{self.id} {self.name}"
+
+
+# 二级标签
+class DB_SecondTag(models.Model):
+    first_tag = models.ForeignKey('DB_FirstTag', verbose_name='一级标签', on_delete=models.SET_NULL, null=True, blank=True)
+    name = models.CharField('二级标签名称', null=True, blank=True, max_length=100)
+    is_del = models.BooleanField('是否删除', default=False)
+    sort = models.IntegerField("序号", null=True, blank=True)
+
+    class Meta:
+        verbose_name = '5_二级标签'
+        verbose_name_plural = '5_二级标签'
+
+    def __str__(self):
+        return f"{self.id}_{self.first_tag_id} {self.name}"
+
+
+# 域名
+class DB_Domain(models.Model):
+    name = models.CharField('域名', null=True, blank=True, max_length=200, unique=True)
+    domain = models.CharField('域名', null=True, blank=True, max_length=200, unique=True)
+    is_del = models.BooleanField('是否删除', default=False)
+
+    class Meta:
+        verbose_name = '6_域名表'
+        verbose_name_plural = '6_域名表'
+
+    def __str__(self):
+        return f"{self.name} {self.domain}"
+
+
+# 环境
+class DB_Env(models.Model):
+    name = models.CharField('环境标识', null=True, blank=True, max_length=50, unique=True)
+    env = models.CharField('环境', null=True, blank=True, max_length=200, unique=True)
+    is_del = models.BooleanField('是否删除', default=False)
+
+    class Meta:
+        verbose_name = '7_环境表'
+        verbose_name_plural = '7_环境表'
+
+    def __str__(self):
+        return f"{self.name} {self.env}"
+
+
+# Token
+class DB_Token(models.Model):
+    name = models.CharField('Token名称', null=True, blank=True, max_length=100)
+    token = models.TextField('Token值', null=True, blank=True)
+    is_del = models.BooleanField('是否删除', default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '8_Token表'
+        verbose_name_plural = '8_Token表'
+
+    def __str__(self):
+        return f"{self.name} {self.token}"
+
+
+# 请求头模板
+class DB_HeaderTemplate(models.Model):
+    name = models.CharField('请求头模板名称', null=True, blank=True, max_length=100)
+    headers = models.JSONField('请求头内容', default=dict, blank=True)
+    is_del = models.BooleanField('是否删除', default=False)
+
+    class Meta:
+        verbose_name = '9_请求头模板表'
+        verbose_name_plural = '9_请求头模板表'
+
+    def __str__(self):
+        return f"{self.name}"
