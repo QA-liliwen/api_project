@@ -1,10 +1,10 @@
 <template>
-  <nav class="navbar navbar-expand-sm navbar-light border-bottom">
+  <nav class="navbar navbar-expand-sm navbar-light border-bottom" style="padding: 0">
     <div class="container-fluid">
       <div class="collapse navbar-collapse" id="topMenuCollapse">
         <ul class="navbar-nav mx-auto">
           <li class="nav-item" v-for="tag in first_tags" :key="tag.id">
-            <a class="nav-link" style="margin-right: 20px" href="#" @click.prevent="select_tag(tag)"
+            <a class="nav-link" style="margin-right: 20px;font-size: 20px" href="#" @click.prevent="select_tag(tag)"
              :class="{active: tag.id === active_tag_id}">{{ tag.name }}</a>
           </li>
         </ul>

@@ -28,4 +28,9 @@ urlpatterns = [
 
     path('upload_case/', upload_case),  # 上传用例xlsx
     path('run_main/', run_main),    # 执行测试任务
+    path('get_run_config/', get_run_config),    # 获取执行配置下拉数据
+    path('execute_run/', execute_run),  # 执行测试（前端触发）
+    path('get_test_item_detail/', get_test_item_detail),  # 获取测试项详情（编辑回填）
+    path('get_interfaces/', get_interfaces),    # 获取接口列表（编辑下拉）
+    path('update_test_item/', update_test_item),  # 更新测试项
 ]

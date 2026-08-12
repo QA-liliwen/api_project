@@ -2,8 +2,7 @@
     <div class="list-group">
         <a href="#" class="list-group-item list-group-item-action"
            v-for="tag in second_tags" :key="tag.id"
-           @click.prevent="select_second(tag)"
-           :class="{active: tag.id === active_second_id}">{{ tag.name }}</a>
+           @click.prevent="select_second(tag)">{{ tag.name }}</a>
     </div>
 </template>
 
@@ -32,6 +31,10 @@
             select_second(tag){
                 this.active_second_id = tag.id;
                 this.$emit('upSecond', {second_tag_id: tag.id, second_tag_name: tag.name})
+                const el = document.getElementById('second-tag-' + tag.id);
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
             }
         },
         watch:{
@@ -44,6 +47,16 @@
 
 <style scoped>
     .list-group{
-        width: 200px;
+        width: 18%;
+        margin-top: 20px;
+        padding: 15px 0;
+        position: fixed;
+        top: 40px;
+        left: 1%;
+    }
+    .list-group-item{
+        font-size: 16px;
+        border: none;
+        border-radius: 0;
     }
 </style>

@@ -68,3 +68,108 @@ def get_grouped_test_items(request):
             "test_items": items
         })
     return JsonResponse({"groups": groups})
+
+
+# 获取执行配置（域名/环境/Token/请求头模板）
+def get_run_config(request):
+    domains = list(DB_Domain.objects.filter(is_del=False).values('id', 'name'))
+    envs = list(DB_Env.objects.filter(is_del=False).values('id', 'name'))
+    tokens = list(DB_Token.objects.filter(is_del=False).values('id', 'name'))
+    header_templates = list(DB_HeaderTemplate.objects.filter(is_del=False).values('id', 'name'))
+    return JsonResponse({
+        "domains": domains,
+        "envs": envs,
+        "tokens": tokens,
+        "header_templates": header_templates,
+    })
+
+
+# 执行测试（选中项 → 查配置 → 调 run_main）
+def execute_run(request):
+    from api_app.api_test.api_single_runner import run_main
+
+    data = json.loads(request.body)
+    test_item_ids = data.get('test_item_ids', [])
+    domain_id = data.get('domain_id')
+    env_id = data.get('env_id')
+    token_id = data.get('token_id')
+    header_template_id = data.get('header_template_id')
+
+    if not test_item_ids:
+        return JsonResponse({"code": -1, "message": "未选择测试项"}, status=400)
+
+    # 查询配置
+    domain_obj = DB_Domain.objects.filter(id=domain_id, is_del=False).first()
+    env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
+    token_obj = DB_Token.objects.filter(id=token_id, is_del=False).first()
+    header_obj = DB_HeaderTemplate.objects.filter(id=header_template_id, is_del=False).first()
+
+    if not domain_obj or not env_obj:
+        return JsonResponse({"code": -1, "message": "域名或环境未配置"}, status=400)
+
+    # 构建请求头
+    headers = header_obj.headers.copy() if header_obj else {}
+    if token_obj:
+        headers['token'] = token_obj.token
+
+    # 调用 run_main
+    run_id = run_main(test_item_ids, domain_obj.domain, env_obj.env, env_obj.name, headers)
+    return JsonResponse({"code": 0, "message": "success", "run_id": run_id})
+
+
+# 获取测试项详情（编辑时回填）
+def get_test_item_detail(request):
+    item_id = request.GET.get('id')
+    item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
+    if not item:
+        return JsonResponse({"code": -1, "message": "测试项不存在"}, status=404)
+    return JsonResponse({
+        "code": 0,
+        "data": {
+            "id": item.id,
+            "name": item.name,
+            "type": item.type,
+            "description": item.description,
+            "interface_id": item.interface_id,
+            "cases": item.cases,
+            "sort": item.sort,
+        }
+    })
+
+
+# 获取所有接口列表（用于下拉框）
+def get_interfaces(request):
+    interfaces = list(DB_Interface.objects.filter(is_del=False).order_by('sort', 'id').values('id', 'name'))
+    return JsonResponse({"interfaces": interfaces})
+
+
+# 更新测试项
+def update_test_item(request):
+    data = json.loads(request.body)
+    item_id = data.get('id')
+    item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
+    if not item:
+        return JsonResponse({"code": -1, "message": "测试项不存在"}, status=404)
+
+    # 软删除
+    if data.get('is_del'):
+        item.is_del = True
+        item.save()
+        return JsonResponse({"code": 0, "message": "删除成功"})
+
+    item.name = data.get('name', item.name)
+    item.type = data.get('type', item.type)
+    item.description = data.get('description', item.description)
+
+    interface_id = data.get('interface_id')
+    if interface_id is not None:
+        item.interface_id = interface_id if interface_id != '' else None
+
+    cases = data.get('cases')
+    if cases is not None:
+        item.cases = cases
+
+    item.save()
+    return JsonResponse({"code": 0, "message": "更新成功"})
+
+

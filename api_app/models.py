@@ -23,7 +23,6 @@ class DB_Interface(models.Model):
 
 # 测试项
 class DB_TestItem(models.Model):
-    id = models.CharField('id', max_length=200, primary_key=True)
     name = models.CharField('测试项名称', max_length=200, unique=True)
     second_tag = models.ForeignKey('DB_SecondTag', verbose_name='二级标签', on_delete=models.SET_NULL, null=True, blank=True)
     type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '多接口编排'), (3, '自定义脚本')], default=1)
@@ -99,12 +98,12 @@ class DB_SecondTag(models.Model):
         verbose_name_plural = '5_二级标签'
 
     def __str__(self):
-        return f"{self.id}_{self.first_tag_id} {self.name}"
+        return f"{self.first_tag_id}_{self.id} {self.name}"
 
 
 # 域名
 class DB_Domain(models.Model):
-    name = models.CharField('域名', null=True, blank=True, max_length=200, unique=True)
+    name = models.CharField('域名名称', null=True, blank=True, max_length=200, unique=True)
     domain = models.CharField('域名', null=True, blank=True, max_length=200, unique=True)
     is_del = models.BooleanField('是否删除', default=False)
 
@@ -118,7 +117,7 @@ class DB_Domain(models.Model):
 
 # 环境
 class DB_Env(models.Model):
-    name = models.CharField('环境标识', null=True, blank=True, max_length=50, unique=True)
+    name = models.CharField('域名名称', null=True, blank=True, max_length=50, unique=True)
     env = models.CharField('环境', null=True, blank=True, max_length=200, unique=True)
     is_del = models.BooleanField('是否删除', default=False)
 

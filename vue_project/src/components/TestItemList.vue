@@ -1,45 +1,119 @@
 <template>
     <div style="text-align: center;width: 100%;margin-top: 40px">
-        <div v-for="group in groups" :key="group.second_tag_id" class="item-group">
-            <h5 style="margin-bottom: 15px">{{ group.second_tag_name }}</h5>
-            <table class="table table-bordered table-hover" style="text-align: center; margin: 0 auto">
+        <div v-for="group in groups" :key="group.second_tag_id" :id="'second-tag-' + group.second_tag_id" class="item-group">
+            <div style="display: flex; align-items: center; margin-bottom: 15px">
+                <div style="flex: 1"></div>
+                <h5 style="margin: 0">{{ group.second_tag_name }}</h5>
+                <div style="flex: 1"></div>
+            </div>
+            <table class="table table-bordered table-hover" style="text-align: center; margin: 0 auto; font-size: 16px">
                 <thead>
                     <tr>
-                        <th style="width: 75px">选择</th>
+                        <th style="width: 75px" @click="toggle_all(group)">
+                            <input type="checkbox" class="form-check-input" :checked="is_all_selected(group)">
+                        </th>
                         <th style="width: 40%">测试项名称</th>
                         <th style="width: 100px">项目类型</th>
                         <th>描述</th>
-                        <th style="width: 75px">操作</th>
+                        <th style="width: 75px">
+                            <button class="btn btn-outline-secondary btn-sm" @click.stop="group.collapsed = !group.collapsed">
+                                {{ group.collapsed ? '展开' : '收起' }}
+                            </button>
+                        </th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr v-for="item in group.test_items" :key="item.id">
-                        <td><input type="checkbox" class="form-check-input" :value="item.id" v-model="checked_ids" @change="up_checked"></td>
+                <tbody v-show="!group.collapsed">
+                    <tr v-for="item in group.test_items" :key="item.id" @click="toggle(item.id)">
+                        <td><input type="checkbox" class="form-check-input" :value="item.id" v-model="checked_ids" @change="up_checked" @click.stop></td>
                         <td>{{ item.name }}</td>
                         <td>{{ type_name(item.type) }}</td>
                         <td>{{ item.description }}</td>
-                        <td><button>编辑</button></td>
+                        <td @click.stop><button class="btn btn-outline-primary btn-sm" @click="open_edit(item)">编辑</button></td>
                     </tr>
                     <tr v-if="group.test_items.length === 0">
-                        <td colspan="5" style="color: gray">暂无测试项</td>
+                        <td colspan="5" style="color: gray; font-size: 16px">暂无测试项</td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- 编辑模态框 -->
+        <div v-if="show_modal" class="modal-overlay" @click.self="show_modal = false">
+            <div class="edit-modal-box" style="width: 900px">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">编辑测试项</h5>
+                        <button type="button" class="btn-close" @click="show_modal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-row">
+                            <label class="form-label-fixed">名称</label>
+                            <input type="text" class="form-control" v-model="edit_form.name">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label-fixed">项目类型</label>
+                            <select class="form-select" v-model="edit_form.type">
+                                <option :value="1">单接口用例</option>
+                                <option :value="2">多接口编排</option>
+                                <option :value="3">自定义脚本</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label-fixed">关联接口</label>
+                            <select class="form-select" v-model="edit_form.interface_id">
+                                <option :value="null">无</option>
+                                <option v-for="iface in interfaces" :key="iface.id" :value="iface.id">{{ iface.name }}</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label-fixed">描述</label>
+                            <textarea class="form-control" rows="2" v-model="edit_form.description"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">测试用例 JSON</label>
+                            <textarea class="form-control" rows="6" v-model="edit_form.cases_json" style="font-family: monospace; font-size: 13px"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label-fixed">上传用例 (xlsx)</label>
+                            <div style="flex: 1; display: flex; gap: 8px; align-items: center">
+                                <input type="file" class="form-control" accept=".xlsx" ref="fileInput" @change="upload_file" style="flex: 1">
+                                <button type="button" class="btn btn-outline-danger btn-sm" @click="soft_delete">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="show_modal = false">取消</button>
+                        <button type="button" class="btn btn-primary" @click="save_edit">保存</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <script>
     import axios from 'axios'
+    import bus from '../bus'
     export default {
         data(){
             return{
                 groups: [],
                 checked_ids: [],
+                interfaces: [],
+                show_modal: false,
+                edit_form: {
+                    id: null,
+                    name: '',
+                    type: 1,
+                    description: '',
+                    interface_id: null,
+                    cases_json: '',
+                },
             }
         },
         mounted:function () {
             this.get_groups()
+            this.get_interfaces()
         },
         methods:{
             get_groups(){
@@ -47,17 +121,144 @@
                 axios.get('http://localhost:8000/get_grouped_test_items/', {
                     params: {first_tag_id: tag_id}
                 }).then(res=>{
-                    this.groups = res.data.groups;
+                    this.groups = res.data.groups.map(g => ({...g, collapsed: false}));
                     this.checked_ids = [];
+                })
+            },
+            get_interfaces(){
+                axios.get('http://localhost:8000/get_interfaces/').then(res => {
+                    this.interfaces = res.data.interfaces || [];
                 })
             },
             type_name(type){
                 const map = {1: '单接口用例', 2: '多接口编排', 3: '自定义脚本'}
                 return map[type] || '未知'
             },
+            is_all_selected(group){
+                if (group.test_items.length === 0) return false
+                return group.test_items.every(item => this.checked_ids.includes(item.id))
+            },
+            toggle_all(group){
+                const ids = group.test_items.map(item => item.id)
+                if (this.is_all_selected(group)) {
+                    this.checked_ids = this.checked_ids.filter(id => !ids.includes(id))
+                } else {
+                    this.checked_ids = [...new Set([...this.checked_ids, ...ids])]
+                }
+                this.up_checked()
+            },
+            toggle(id){
+                if (this.checked_ids.includes(id)) {
+                    this.checked_ids = this.checked_ids.filter(i => i !== id)
+                } else {
+                    this.checked_ids.push(id)
+                }
+                this.up_checked()
+            },
             up_checked(){
-                this.$emit('upItems', {checked_ids: this.checked_ids, count: this.checked_ids.length})
-            }
+                const checked_names = this.get_checked_names();
+                this.$emit('upItems', {checked_ids: this.checked_ids, checked_names: checked_names, count: this.checked_ids.length})
+                // 通过 event bus 直接通知 run_list（绕开 prop 响应性 HMR 问题）
+                bus.$emit('items:changed', {
+                    ids: this.checked_ids.slice(),
+                    names: checked_names.slice(),
+                })
+            },
+            get_checked_names(){
+                const names = [];
+                for (const group of this.groups) {
+                    for (const item of group.test_items) {
+                        if (this.checked_ids.includes(item.id)) {
+                            names.push(item.name)
+                        }
+                    }
+                }
+                return names
+            },
+            open_edit(item){
+                axios.get('http://localhost:8000/get_test_item_detail/', {
+                    params: {id: item.id}
+                }).then(res => {
+                    if (res.data.code === 0) {
+                        const d = res.data.data;
+                        this.edit_form = {
+                            id: d.id,
+                            name: d.name,
+                            type: d.type,
+                            description: d.description,
+                            interface_id: d.interface_id,
+                            cases_json: JSON.stringify(d.cases, null, 2),
+                        };
+                        this.show_modal = true;
+                    } else {
+                        alert(res.data.message || '获取详情失败');
+                    }
+                })
+            },
+            upload_file(){
+                const fileInput = this.$refs.fileInput;
+                if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('fileUpload', fileInput.files[0]);
+                axios.post('http://localhost:8000/upload_case/', formData, {
+                    headers: {'Content-Type': 'multipart/form-data'}
+                }).then(res => {
+                    if (res.data.cases) {
+                        this.edit_form.cases_json = JSON.stringify(res.data.cases, null, 2);
+                    } else {
+                        alert(res.data.msg || '解析失败');
+                    }
+                }).catch(err => {
+                    alert('上传失败: ' + (err.response?.data?.msg || err.message));
+                })
+            },
+            save_edit(){
+                let cases = [];
+                if (this.edit_form.cases_json) {
+                    try {
+                        cases = JSON.parse(this.edit_form.cases_json);
+                    } catch (e) {
+                        alert('用例 JSON 格式错误');
+                        return;
+                    }
+                }
+                const payload = {
+                    id: this.edit_form.id,
+                    name: this.edit_form.name,
+                    type: this.edit_form.type,
+                    description: this.edit_form.description,
+                    interface_id: this.edit_form.interface_id,
+                    cases: cases,
+                };
+                axios.post('http://localhost:8000/update_test_item/', payload).then(res => {
+                    if (res.data.code === 0) {
+                        this.show_modal = false;
+                        this.get_groups();
+                    } else {
+                        alert(res.data.message || '保存失败');
+                    }
+                }).catch(err => {
+                    alert('请求失败: ' + err.message);
+                })
+            },
+            soft_delete(){
+                if (!confirm('确定要删除这个测试项吗？')) return;
+                axios.post('http://localhost:8000/update_test_item/', {
+                    id: this.edit_form.id,
+                    is_del: true
+                }).then(res => {
+                    if (res.data.code === 0) {
+                        this.show_modal = false;
+                        this.get_groups();
+                    } else {
+                        alert(res.data.message || '删除失败');
+                    }
+                }).catch(err => {
+                    alert('请求失败: ' + err.message);
+                })
+            },
         },
         watch:{
             '$route'(){
@@ -70,5 +271,30 @@
 <style scoped>
     .item-group{
         margin-bottom: 80px;
+    }
+    .modal-overlay{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+    .form-row{
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+        gap: 12px;
+    }
+    .form-label-fixed{
+        width: 110px;
+        min-width: 110px;
+        margin: 0;
+        text-align: right;
+        font-size: 14px;
     }
 </style>
