@@ -1,9 +1,8 @@
-import datetime
 import json
-
-from django.shortcuts import render
+import os
 from django.http import JsonResponse
-
+from api_app.api_test.api_single_runner import XLSX_DIR
+from api_app.api_test.api_single_runner import single_run_main
 from api_app.models import *
 
 
@@ -49,12 +48,6 @@ def get_second_tags(request):
     return JsonResponse({"second_tags": second_tags})
 
 
-# 测试项数据（按一级标签筛选）
-def get_test_items(request):
-    test_items = list(DB_TestItem.objects.filter(is_del=False).order_by('sort', 'id').values('id', 'name', 'type', 'description', 'created_at'))
-    return JsonResponse({"test_items": test_items})
-
-
 # 按一级标签获取二级标签分组的测试项
 def get_grouped_test_items(request):
     first_tag_id = request.GET.get("first_tag_id")
@@ -86,9 +79,15 @@ def get_run_config(request):
 
 # 执行测试（选中项 → 查配置 → 调 run_main）
 def execute_run(request):
-    from api_app.api_test.api_single_runner import run_main
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    if not request.body:
+        return JsonResponse({"code": -1, "message": "请求体为空"}, status=400)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"}, status=400)
 
-    data = json.loads(request.body)
     test_item_ids = data.get('test_item_ids', [])
     domain_id = data.get('domain_id')
     env_id = data.get('env_id')
@@ -97,27 +96,22 @@ def execute_run(request):
 
     if not test_item_ids:
         return JsonResponse({"code": -1, "message": "未选择测试项"}, status=400)
-
-    # 查询配置
     domain_obj = DB_Domain.objects.filter(id=domain_id, is_del=False).first()
     env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
     token_obj = DB_Token.objects.filter(id=token_id, is_del=False).first()
     header_obj = DB_HeaderTemplate.objects.filter(id=header_template_id, is_del=False).first()
-
     if not domain_obj or not env_obj:
         return JsonResponse({"code": -1, "message": "域名或环境未配置"}, status=400)
 
-    # 构建请求头
     headers = header_obj.headers.copy() if header_obj else {}
     if token_obj:
         headers['token'] = token_obj.token
 
-    # 调用 run_main
-    run_id = run_main(test_item_ids, domain_obj.domain, env_obj.env, env_obj.name, headers)
+    run_id = single_run_main(test_item_ids, domain_obj.domain, env_obj.env, env_obj.name, headers)
     return JsonResponse({"code": 0, "message": "success", "run_id": run_id})
 
 
-# 获取测试项详情（编辑时回填）
+# 获取测试项详情
 def get_test_item_detail(request):
     item_id = request.GET.get('id')
     item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
@@ -137,7 +131,7 @@ def get_test_item_detail(request):
     })
 
 
-# 获取所有接口列表（用于下拉框）
+# 获取所有接口列表
 def get_interfaces(request):
     interfaces = list(DB_Interface.objects.filter(is_del=False).order_by('sort', 'id').values('id', 'name'))
     return JsonResponse({"interfaces": interfaces})
@@ -145,13 +139,23 @@ def get_interfaces(request):
 
 # 更新测试项
 def update_test_item(request):
-    data = json.loads(request.body)
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    if not request.body:
+        return JsonResponse({"code": -1, "message": "请求体为空"}, status=400)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"}, status=400)
+
     item_id = data.get('id')
+    if not item_id:
+        return JsonResponse({"code": -1, "message": "缺少 id 参数"}, status=400)
+
     item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
     if not item:
         return JsonResponse({"code": -1, "message": "测试项不存在"}, status=404)
 
-    # 软删除
     if data.get('is_del'):
         item.is_del = True
         item.save()
@@ -169,7 +173,16 @@ def update_test_item(request):
     if cases is not None:
         item.cases = cases
 
+    # 保存时重命名上传的 xlsx 文件
+    uploaded_filename = data.get('uploaded_filename')
+    if uploaded_filename:
+        old_path = os.path.join(XLSX_DIR, uploaded_filename)
+        new_name = f"{item.id}_{item.name}.xlsx"
+        new_path = os.path.join(XLSX_DIR, new_name)
+        if os.path.exists(old_path) and old_path != new_path:
+            if os.path.exists(new_path):
+                os.remove(new_path)
+            os.rename(old_path, new_path)
+
     item.save()
     return JsonResponse({"code": 0, "message": "更新成功"})
-
-

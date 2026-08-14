@@ -54,11 +54,9 @@
             }
         },
         mounted:function () {
-            console.log('[run_list] mounted')
             this.get_config()
             // 通过 event bus 接收 TestItemList 勾选事件（绕开 prop 响应性 HMR 问题）
             bus.$on('items:changed', payload => {
-                console.log('[run_list] bus 收到:', payload)
                 this.selected_items = payload.names
                 this.selected_ids = payload.ids
             })
@@ -88,11 +86,11 @@
                     token_id: this.selected_token || null,
                     header_template_id: this.selected_header_template || null,
                 }).then(res=>{
-                    console.log('执行结果：', res.data);
                     alert('执行已提交，run_id=' + res.data.run_id);
                 }).catch(err=>{
                     console.error('执行失败：', err);
-                    alert('执行失败');
+                    const msg = err.response?.data?.message || err.response?.data?.msg || err.message || '未知错误';
+                    alert('执行失败：' + msg);
                 }).finally(()=>{
                     this.running = false
                 })

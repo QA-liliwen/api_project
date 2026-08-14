@@ -15,4 +15,4 @@ with open(cases_file, "r", encoding="utf-8") as f:
     ids=[c['CaseID'] for c in cases_data]
 )
 def test_api(case):
-    run_and_assert(case)
+    run_main(case)

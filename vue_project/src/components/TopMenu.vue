@@ -35,7 +35,10 @@
         },
         methods:{
             select_tag(tag){
-                this.$router.push('/api_list/' + tag.id + '/')
+                const path = '/api_list/' + tag.id + '/'
+                if (this.$route.path !== path) {
+                    this.$router.push(path)
+                }
             }
         },
         watch: {

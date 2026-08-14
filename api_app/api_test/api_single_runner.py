@@ -1,10 +1,10 @@
-import time
-import datetime
 import json
 import os
 import subprocess
+import time
 import openpyxl
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
+from django.utils import timezone
 from api_app.models import *
 
 xlsx_header_cn = ['CaseID', '用例名称', '是否执行', '请求体', '预期状态码', '断言', '描述']
@@ -25,7 +25,7 @@ def upload_case(request):
     test_item_data = read_single_case(file_path)
     if not test_item_data:
         return JsonResponse({"msg": "用例解析失败，请检查文件格式"}, status=400)
-    return JsonResponse({"msg": "解析成功", "cases": test_item_data})
+    return JsonResponse({"msg": "解析成功", "cases": test_item_data, "filename": upload_xlsx_name})
 
 
 # 读取单个用例文件
@@ -98,10 +98,10 @@ def build_test_item_cases(test_item_id, domain, env, headers):
 
 
 # 执行主函数（核心逻辑）
-def run_main(test_item_ids, domain, env, env_name, headers):
+def single_run_main(test_item_ids, domain, env, env_name, headers):
     run_ids = ','.join(str(i) for i in test_item_ids)
     started_ts = time.time()
-    started_at = datetime.datetime.fromtimestamp(started_ts)
+    started_at = timezone.now()
     test_run = DB_run_result.objects.create(
         env=env_name,
         status="running",

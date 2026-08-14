@@ -1,6 +1,5 @@
 import pytest
 import requests
-
 from api_app.api_test.log_config import get_logger
 
 log = get_logger(__name__)
@@ -123,14 +122,15 @@ def assert_in(expr, resp, resp_json):
 
 
 # 断言层
-def run_and_assert(case):
+def run_main(case):
     if case.get('is_active') != 'Y':
         log.debug(f"用例 {case['CaseID']} 未启用")
         pytest.skip(f"用例 {case['CaseID']} 未启用")
 
     resp = run_request(url=case['url'], method=case['method'], headers=case['headers'], body=case.get('body', ''))
     log.info(f"状态码断言: 实际={resp.status_code}, 期望={case['expected_status_code']}")
-    assert resp.status_code == case['expected_status_code'], f"状态码: 实际={resp.status_code}, 期望={case['expected_status_code']}"
+    assert resp.status_code == case[
+        'expected_status_code'], f"状态码: 实际={resp.status_code}, 期望={case['expected_status_code']}"
     log.info(f"数据断言: {case['assertions']}")
     log.info(f"响应体: {resp.text[:1000]}")
     resp_json = resp.json()

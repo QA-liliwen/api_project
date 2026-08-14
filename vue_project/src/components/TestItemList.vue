@@ -108,6 +108,7 @@
                     description: '',
                     interface_id: null,
                     cases_json: '',
+                    uploaded_filename: '',
                 },
             }
         },
@@ -188,6 +189,7 @@
                             description: d.description,
                             interface_id: d.interface_id,
                             cases_json: JSON.stringify(d.cases, null, 2),
+                            uploaded_filename: '',
                         };
                         this.show_modal = true;
                     } else {
@@ -207,6 +209,7 @@
                 }).then(res => {
                     if (res.data.cases) {
                         this.edit_form.cases_json = JSON.stringify(res.data.cases, null, 2);
+                        this.edit_form.uploaded_filename = res.data.filename || '';
                     } else {
                         alert(res.data.msg || '解析失败');
                     }
@@ -231,6 +234,7 @@
                     description: this.edit_form.description,
                     interface_id: this.edit_form.interface_id,
                     cases: cases,
+                    uploaded_filename: this.edit_form.uploaded_filename,
                 };
                 axios.post('http://localhost:8000/update_test_item/', payload).then(res => {
                     if (res.data.code === 0) {
