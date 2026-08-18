@@ -4,7 +4,9 @@
             <div style="display: flex; align-items: center; margin-bottom: 15px">
                 <div style="flex: 1"></div>
                 <h5 style="margin: 0">{{ group.second_tag_name }}</h5>
-                <div style="flex: 1"></div>
+                <div style="flex: 1; text-align: right; margin-right: 16px;">
+                    <button class="btn btn-outline-primary btn-sm" @click="open_create(group.second_tag_id)" style="border: 0px">新建</button>
+                </div>
             </div>
             <table class="table table-bordered table-hover" style="text-align: center; margin: 0 auto; font-size: 16px">
                 <thead>
@@ -16,7 +18,7 @@
                         <th style="width: 100px">项目类型</th>
                         <th>描述</th>
                         <th style="width: 75px">
-                            <button class="btn btn-outline-secondary btn-sm" @click.stop="group.collapsed = !group.collapsed">
+                            <button class="btn btn-outline-secondary btn-sm" @click.stop="group.collapsed = !group.collapsed" style="border: 0px">
                                 {{ group.collapsed ? '展开' : '收起' }}
                             </button>
                         </th>
@@ -25,10 +27,10 @@
                 <tbody v-show="!group.collapsed">
                     <tr v-for="item in group.test_items" :key="item.id" @click="toggle(item.id)">
                         <td><input type="checkbox" class="form-check-input" :value="item.id" v-model="checked_ids" @change="up_checked" @click.stop></td>
-                        <td>{{ item.name }}</td>
+                        <td style="text-align: left; padding-left: 16px">{{ item.name }} <span v-if="item.type === 2" class="script-badge">[Script]</span></td>
                         <td>{{ type_name(item.type) }}</td>
                         <td>{{ item.description }}</td>
-                        <td @click.stop><button class="btn btn-outline-primary btn-sm" @click="open_edit(item)">编辑</button></td>
+                        <td @click.stop><button class="btn btn-outline-primary btn-sm" @click="open_edit(item)" style="border: 0px">编辑</button></td>
                     </tr>
                     <tr v-if="group.test_items.length === 0">
                         <td colspan="5" style="color: gray; font-size: 16px">暂无测试项</td>
@@ -42,46 +44,63 @@
             <div class="edit-modal-box" style="width: 900px">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">编辑测试项</h5>
+                        <h5 class="modal-title">{{ edit_form.is_create ? '新建测试项' : '编辑测试项' }}</h5>
                         <button type="button" class="btn-close" @click="show_modal = false"></button>
                     </div>
                     <div class="modal-body">
                         <div class="form-row">
-                            <label class="form-label-fixed">名称</label>
+                            <label class="form-label-fixed">名 称：</label>
                             <input type="text" class="form-control" v-model="edit_form.name">
                         </div>
                         <div class="form-row">
-                            <label class="form-label-fixed">项目类型</label>
+                            <label class="form-label-fixed">项目类型：</label>
                             <select class="form-select" v-model="edit_form.type">
                                 <option :value="1">单接口用例</option>
-                                <option :value="2">多接口编排</option>
-                                <option :value="3">自定义脚本</option>
+                                <option :value="2">自定义脚本</option>
                             </select>
                         </div>
-                        <div class="form-row">
-                            <label class="form-label-fixed">关联接口</label>
+                        <div v-if="edit_form.is_create" class="form-row">
+                            <label class="form-label-fixed">二级标签：</label>
+                            <select class="form-select" v-model="edit_form.second_tag_id">
+                                <option v-for="tag in second_tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">关联接口：</label>
                             <select class="form-select" v-model="edit_form.interface_id">
                                 <option :value="null">无</option>
                                 <option v-for="iface in interfaces" :key="iface.id" :value="iface.id">{{ iface.name }}</option>
                             </select>
                         </div>
                         <div class="form-row">
-                            <label class="form-label-fixed">描述</label>
-                            <textarea class="form-control" rows="2" v-model="edit_form.description"></textarea>
+                            <label class="form-label-fixed">描 述：</label>
+                            <input class="form-control" rows="2" v-model="edit_form.description"></input>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">测试用例 JSON</label>
-                            <textarea class="form-control" rows="6" v-model="edit_form.cases_json" style="font-family: monospace; font-size: 13px"></textarea>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">测试JSON：</label>
+                            <textarea class="form-control" rows="6" v-model="edit_form.cases_json" style="width: 744px;"></textarea>
                         </div>
-                        <div class="form-row">
-                            <label class="form-label-fixed">上传用例 (xlsx)</label>
+                        <div v-if="edit_form.type === 2" class="form-row">
+                            <label class="form-label-fixed">上传脚本：</label>
+                            <div style="flex: 1; display: flex; gap: 8px; align-items: center">
+                                <input type="file" class="form-control" accept=".py" ref="scriptInput" @change="upload_script" style="flex: 1">
+                            </div>
+                        </div>
+                        <div v-if="edit_form.type === 2 && edit_form.script_filename" class="form-row">
+                            <label class="form-label-fixed"></label>
+                            <div style="flex: 1; text-align: left; font-size: 13px; color: #666">
+                                已上传: {{ edit_form.script_filename }}
+                            </div>
+                        </div>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">上传用例：</label>
                             <div style="flex: 1; display: flex; gap: 8px; align-items: center">
                                 <input type="file" class="form-control" accept=".xlsx" ref="fileInput" @change="upload_file" style="flex: 1">
-                                <button type="button" class="btn btn-outline-danger btn-sm" @click="soft_delete">删除</button>
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer">
+                        <button v-if="!edit_form.is_create" type="button" class="btn btn-danger" style="margin-right: auto" @click="soft_delete">删除测试项</button>
                         <button type="button" class="btn btn-secondary" @click="show_modal = false">取消</button>
                         <button type="button" class="btn btn-primary" @click="save_edit">保存</button>
                     </div>
@@ -100,26 +119,32 @@
                 groups: [],
                 checked_ids: [],
                 interfaces: [],
+                second_tags: [],
                 show_modal: false,
                 edit_form: {
                     id: null,
+                    is_create: false,
+                    second_tag_id: null,
                     name: '',
                     type: 1,
                     description: '',
                     interface_id: null,
                     cases_json: '',
                     uploaded_filename: '',
+                    script_filename: '',
+                    uploaded_script: '',
                 },
             }
         },
         mounted:function () {
             this.get_groups()
             this.get_interfaces()
+            this.get_second_tags()
         },
         methods:{
             get_groups(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://localhost:8000/get_grouped_test_items/', {
+                axios.get('http://127.0.0.100:8000/get_grouped_test_items/', {
                     params: {first_tag_id: tag_id}
                 }).then(res=>{
                     this.groups = res.data.groups.map(g => ({...g, collapsed: false}));
@@ -127,12 +152,20 @@
                 })
             },
             get_interfaces(){
-                axios.get('http://localhost:8000/get_interfaces/').then(res => {
+                axios.get('http://127.0.0.100:8000/get_interfaces/').then(res => {
                     this.interfaces = res.data.interfaces || [];
                 })
             },
+            get_second_tags(){
+                const tag_id = this.$route.params.tag_id;
+                axios.get('http://127.0.0.100:8000/get_second_tags/', {
+                    params: {first_tag_id: tag_id}
+                }).then(res => {
+                    this.second_tags = res.data.second_tags || [];
+                })
+            },
             type_name(type){
-                const map = {1: '单接口用例', 2: '多接口编排', 3: '自定义脚本'}
+                const map = {1: '单接口用例', 2: '自定义脚本'}
                 return map[type] || '未知'
             },
             is_all_selected(group){
@@ -177,25 +210,45 @@
                 return names
             },
             open_edit(item){
-                axios.get('http://localhost:8000/get_test_item_detail/', {
+                axios.get('http://127.0.0.100:8000/get_test_item_detail/', {
                     params: {id: item.id}
                 }).then(res => {
                     if (res.data.code === 0) {
                         const d = res.data.data;
                         this.edit_form = {
                             id: d.id,
+                            is_create: false,
+                            second_tag_id: null,
                             name: d.name,
                             type: d.type,
                             description: d.description,
                             interface_id: d.interface_id,
                             cases_json: JSON.stringify(d.cases, null, 2),
                             uploaded_filename: '',
+                            script_filename: d.script_filename || '',
+                            uploaded_script: '',
                         };
                         this.show_modal = true;
                     } else {
                         alert(res.data.message || '获取详情失败');
                     }
                 })
+            },
+            open_create(second_tag_id){
+                this.edit_form = {
+                    id: null,
+                    is_create: true,
+                    second_tag_id: second_tag_id,
+                    name: '',
+                    type: 1,
+                    description: '',
+                    interface_id: null,
+                    cases_json: '',
+                    uploaded_filename: '',
+                    script_filename: '',
+                    uploaded_script: '',
+                };
+                this.show_modal = true;
             },
             upload_file(){
                 const fileInput = this.$refs.fileInput;
@@ -204,7 +257,7 @@
                 }
                 const formData = new FormData();
                 formData.append('fileUpload', fileInput.files[0]);
-                axios.post('http://localhost:8000/upload_case/', formData, {
+                axios.post('http://127.0.0.100:8000/upload_case/', formData, {
                     headers: {'Content-Type': 'multipart/form-data'}
                 }).then(res => {
                     if (res.data.cases) {
@@ -217,6 +270,39 @@
                     alert('上传失败: ' + (err.response?.data?.msg || err.message));
                 })
             },
+            upload_script(){
+                const scriptInput = this.$refs.scriptInput;
+                if (!scriptInput || !scriptInput.files || scriptInput.files.length === 0) {
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('fileUpload', scriptInput.files[0]);
+                axios.post('http://127.0.0.100:8000/upload_script/', formData, {
+                    headers: {'Content-Type': 'multipart/form-data'}
+                }).then(res => {
+                    if (res.data.filename) {
+                        this.edit_form.script_filename = res.data.filename;
+                        this.edit_form.uploaded_script = res.data.filename;  // 标记本次新上传
+                    } else {
+                        alert(res.data.msg || '上传失败');
+                    }
+                }).catch(err => {
+                    alert('上传失败: ' + (err.response?.data?.msg || err.message));
+                })
+            },
+            clear_script(){
+                this.edit_form.script_filename = '';
+                this.edit_form.uploaded_script = '';
+                if (this.$refs.scriptInput) {
+                    this.$refs.scriptInput.value = '';
+                }
+            },
+            clear_file(){
+                this.edit_form.uploaded_filename = '';
+                if (this.$refs.fileInput) {
+                    this.$refs.fileInput.value = '';
+                }
+            },
             save_edit(){
                 let cases = [];
                 if (this.edit_form.cases_json) {
@@ -227,16 +313,21 @@
                         return;
                     }
                 }
+                const isScript = this.edit_form.type === 2;
                 const payload = {
-                    id: this.edit_form.id,
+                    id: this.edit_form.is_create ? null : this.edit_form.id,
+                    second_tag_id: this.edit_form.second_tag_id,
                     name: this.edit_form.name,
                     type: this.edit_form.type,
                     description: this.edit_form.description,
-                    interface_id: this.edit_form.interface_id,
-                    cases: cases,
-                    uploaded_filename: this.edit_form.uploaded_filename,
+                    // type=1 传接口和用例，type=2 置空
+                    interface_id: isScript ? null : this.edit_form.interface_id,
+                    cases: isScript ? [] : cases,
+                    // type=1 传 xlsx，type=2 传脚本
+                    uploaded_filename: isScript ? '' : this.edit_form.uploaded_filename,
+                    uploaded_script: isScript ? this.edit_form.uploaded_script : '',
                 };
-                axios.post('http://localhost:8000/update_test_item/', payload).then(res => {
+                axios.post('http://127.0.0.100:8000/update_test_item/', payload).then(res => {
                     if (res.data.code === 0) {
                         this.show_modal = false;
                         this.get_groups();
@@ -249,7 +340,7 @@
             },
             soft_delete(){
                 if (!confirm('确定要删除这个测试项吗？')) return;
-                axios.post('http://localhost:8000/update_test_item/', {
+                axios.post('http://127.0.0.100:8000/update_test_item/', {
                     id: this.edit_form.id,
                     is_del: true
                 }).then(res => {
@@ -298,7 +389,13 @@
         width: 110px;
         min-width: 110px;
         margin: 0;
-        text-align: right;
-        font-size: 14px;
+        text-align: middle;
+        font-size: 16px;
+    }
+    .script-badge{
+        color: #0d6efd;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 6px;
     }
 </style>

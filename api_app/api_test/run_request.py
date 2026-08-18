@@ -1,5 +1,9 @@
 import pytest
 import requests
+import os
+import sys
+import json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api_app.api_test.log_config import get_logger
 
 log = get_logger(__name__)
@@ -180,3 +184,18 @@ def run_request(url, method, headers, body=None):
 
 if __name__ == '__main__':
     pass
+
+
+# ===== pytest 入口 =====
+cases_file = os.environ.get("CASES_FILE")
+if cases_file:
+    with open(cases_file, "r", encoding="utf-8") as f:
+        cases_data = json.load(f)
+
+    @pytest.mark.parametrize(
+        "case",
+        cases_data,
+        ids=[c['CaseID'] for c in cases_data]
+    )
+    def test_api(case):
+        run_main(case)

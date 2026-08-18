@@ -25,9 +25,11 @@ class DB_Interface(models.Model):
 class DB_TestItem(models.Model):
     name = models.CharField('测试项名称', max_length=200, unique=True)
     second_tag = models.ForeignKey('DB_SecondTag', verbose_name='二级标签', on_delete=models.SET_NULL, null=True, blank=True)
-    type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '多接口编排'), (3, '自定义脚本')], default=1)
+    type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '自定义脚本')], default=1)
     interface = models.ForeignKey('DB_Interface', verbose_name='关联接口', on_delete=models.SET_NULL, null=True, blank=True)
     cases = models.JSONField("用例数据", default=list, blank=True)
+    script_content = models.TextField('脚本内容', blank=True, default='')
+    script_filename = models.CharField('脚本文件名', max_length=255, blank=True, default='')
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)

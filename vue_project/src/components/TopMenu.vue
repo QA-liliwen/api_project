@@ -10,7 +10,7 @@
         </ul>
         <ul class="navbar-nav">
           <li class="nav-item">
-            <a class="nav-link" href="http://127.0.0.1:8000/admin/" target="_blank">后台</a>
+            <a class="nav-link" href="http://127.0.0.100:8000/admin/" target="_blank">后台</a>
           </li>
         </ul>
       </div>
@@ -29,7 +29,7 @@
         },
         mounted:function () {
             this.active_tag_id = this.$route.params.tag_id;
-            axios.get('http://localhost:8000/get_top_menu/').then(res=>{
+            axios.get('http://127.0.0.100:8000/get_top_menu/').then(res=>{
                 this.first_tags = res.data.first_tags;
             })
         },

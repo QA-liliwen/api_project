@@ -17,7 +17,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from api_app.views_test_item import *
-from api_app.api_test.api_single_runner import *
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,8 +26,9 @@ urlpatterns = [
     path('get_grouped_test_items/', get_grouped_test_items),
 
     path('upload_case/', upload_case),  # 上传用例xlsx
+    path('upload_script/', upload_script),  # 上传自定义脚本.py
     path('get_run_config/', get_run_config),    # 获取执行配置下拉数据
-    path('execute_run/', execute_run),  # 执行测试（前端触发）
+    path('execute_run/', execute_run),  # 执行测试（本地/Jenkins，由 run_mode 区分）
     path('get_test_item_detail/', get_test_item_detail),  # 获取测试项详情（编辑回填）
     path('get_interfaces/', get_interfaces),    # 获取接口列表（编辑下拉）
     path('update_test_item/', update_test_item),  # 更新测试项

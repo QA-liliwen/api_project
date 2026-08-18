@@ -1,54 +1,32 @@
 import json
 import os
+import openpyxl
 from django.http import JsonResponse
-from api_app.api_test.api_single_runner import XLSX_DIR
-from api_app.api_test.api_single_runner import single_run_main
+from django.utils import timezone
 from api_app.models import *
+from api_app.api_test.api_executor import dispatch_run
+
+xlsx_header_cn = ['CaseID', '用例名称', '是否执行', '请求体', '预期状态码', '断言', '描述']
+xlsx_header_en = ['CaseID', 'case_name', 'is_active', 'body', 'expected_status_code', 'assertions', 'description']
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+XLSX_DIR = os.path.join(BASE_DIR, "data", "xlsx")
+SCRIPTS_DIR = os.path.join(BASE_DIR, "data", "scripts")
 
 
-# Create your views here.
-
-# 更新测试结果
-def update_run_result(request):
-    data = json.loads(request.body)
-    run_id = data.get("test_run_id")
-    run_result = DB_run_result.objects.get(id=run_id)
-    run_result.status = data.get("status", "completed")
-    run_result.total = data.get("total")
-    run_result.passed = data.get("passed")
-    run_result.failed = data.get("failed")
-    run_result.skipped = data.get("skipped")
-    run_result.duration_seconds = data.get("duration")
-    run_result.finished_at = data.get("finished_at")
-    run_result.report_file = data.get("report_file")
-    run_result.log_file = data.get("log_file")
-    run_result.jenkins_build_url = data.get("jenkins_build_url")
-    run_result.save()
-
-    return JsonResponse({
-        "code": 0,
-        "message": "success",
-        "data": {
-            "test_run_id": run_id,
-            "status": run_result.status
-        }
-    })
-
-
-# 一级标签（顶部菜单数据）
+# 一级标签
 def get_top_menu(request):
     first_tags = list(DB_FirstTag.objects.filter(is_del=False).order_by('sort', 'id').values())
     return JsonResponse({"first_tags": first_tags})
 
 
-# 二级标签数据（左侧菜单数据，按一级标签筛选）
+# 二级标签
 def get_second_tags(request):
     first_tag_id = request.GET.get("first_tag_id")
     second_tags = list(DB_SecondTag.objects.filter(is_del=False, first_tag_id=first_tag_id).order_by('sort', 'id').values('id', 'name', 'sort'))
     return JsonResponse({"second_tags": second_tags})
 
 
-# 按一级标签获取二级标签分组的测试项
+# 测试项
 def get_grouped_test_items(request):
     first_tag_id = request.GET.get("first_tag_id")
     second_tags = DB_SecondTag.objects.filter(is_del=False, first_tag_id=first_tag_id).order_by('sort', 'id')
@@ -63,7 +41,7 @@ def get_grouped_test_items(request):
     return JsonResponse({"groups": groups})
 
 
-# 获取执行配置（域名/环境/Token/请求头模板）
+# 执行配置
 def get_run_config(request):
     domains = list(DB_Domain.objects.filter(is_del=False).values('id', 'name'))
     envs = list(DB_Env.objects.filter(is_del=False).values('id', 'name'))
@@ -77,41 +55,82 @@ def get_run_config(request):
     })
 
 
-# 执行测试（选中项 → 查配置 → 调 run_main）
-def execute_run(request):
-    if request.method != 'POST':
-        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
-    if not request.body:
-        return JsonResponse({"code": -1, "message": "请求体为空"}, status=400)
+# 上传用例文件
+def upload_case(request):
+    file = request.FILES.get("fileUpload")
+    if not file or not file.name.endswith(".xlsx"):
+        return JsonResponse({"msg": "请上传 xlsx 文件"}, status=400)
+    upload_xlsx_name = file.name
+    file_path = os.path.join(XLSX_DIR, upload_xlsx_name)
+    with open(file_path, "wb") as f:
+        for chunk in file.chunks():
+            f.write(chunk)
+    test_item_data = read_single_case(file_path)
+    if not test_item_data:
+        return JsonResponse({"msg": "用例解析失败，请检查文件格式"}, status=400)
+    return JsonResponse({"msg": "解析成功", "cases": test_item_data, "filename": upload_xlsx_name})
+
+
+# 上传自定义脚本文件
+def upload_script(request):
+    print(f"[upload_script] 被调用, method={request.method}, FILES={list(request.FILES.keys())}")
+    file = request.FILES.get("fileUpload")
+    if not file or not file.name.endswith(".py"):
+        return JsonResponse({"msg": "请上传 .py 文件"}, status=400)
+    script_filename = file.name
+    file_path = os.path.join(SCRIPTS_DIR, script_filename)
+    with open(file_path, "wb") as f:
+        for chunk in file.chunks():
+            f.write(chunk)
+    return JsonResponse({"msg": "上传成功", "filename": script_filename})
+
+
+# 读取用例文件
+def read_single_case(file_path: str):
+    wb = openpyxl.load_workbook(file_path, read_only=True)
     try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"}, status=400)
+        rows = list(wb.active.iter_rows(values_only=True))
+        if not rows:
+            return []
+        headers = [str(h).strip() for h in rows[0]]
+        if headers != xlsx_header_cn:
+            return []
 
-    test_item_ids = data.get('test_item_ids', [])
-    domain_id = data.get('domain_id')
-    env_id = data.get('env_id')
-    token_id = data.get('token_id')
-    header_template_id = data.get('header_template_id')
+        data = []
+        for row_idx, row in enumerate(rows[1:], start=2):
+            row_dict = {}
+            for idx, header in enumerate(xlsx_header_en):
+                value = row[idx] if idx < len(row) else ""
+                if value is None:
+                    value = ""
+                elif isinstance(value, str):
+                    value = value.strip()
+                    if value.startswith("{") and value.endswith("}"):
+                        try:
+                            value = json.loads(value)
+                        except json.JSONDecodeError:
+                            pass
+                row_dict[header] = value
+            print(f"第 {row_idx} 行: {row_dict}")
 
-    if not test_item_ids:
-        return JsonResponse({"code": -1, "message": "未选择测试项"}, status=400)
-    domain_obj = DB_Domain.objects.filter(id=domain_id, is_del=False).first()
-    env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
-    token_obj = DB_Token.objects.filter(id=token_id, is_del=False).first()
-    header_obj = DB_HeaderTemplate.objects.filter(id=header_template_id, is_del=False).first()
-    if not domain_obj or not env_obj:
-        return JsonResponse({"code": -1, "message": "域名或环境未配置"}, status=400)
+            if not row_dict.get("expected_status_code") or not row_dict.get("assertions"):
+                print(f"错误：第 {row_idx} 行 预期状态码/断言 为空")
+                return []
 
-    headers = header_obj.headers.copy() if header_obj else {}
-    if token_obj:
-        headers['token'] = token_obj.token
+            assertions = row_dict["assertions"]
+            if isinstance(assertions, str):
+                row_dict["assertions"] = [a.strip() for a in assertions.split(";") if a.strip()]
+            else:
+                row_dict["assertions"] = [str(assertions)]
+            data.append(row_dict)
 
-    run_id = single_run_main(test_item_ids, domain_obj.domain, env_obj.env, env_obj.name, headers)
-    return JsonResponse({"code": 0, "message": "success", "run_id": run_id})
+        print(f"解析成功，共 {len(data)} 条用例")
+        return data
+    finally:
+        wb.close()
 
 
-# 获取测试项详情
+# 测试项详情
 def get_test_item_detail(request):
     item_id = request.GET.get('id')
     item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
@@ -126,18 +145,20 @@ def get_test_item_detail(request):
             "description": item.description,
             "interface_id": item.interface_id,
             "cases": item.cases,
+            "script_content": item.script_content,
+            "script_filename": item.script_filename,
             "sort": item.sort,
         }
     })
 
 
-# 获取所有接口列表
+# 接口列表
 def get_interfaces(request):
     interfaces = list(DB_Interface.objects.filter(is_del=False).order_by('sort', 'id').values('id', 'name'))
     return JsonResponse({"interfaces": interfaces})
 
 
-# 更新测试项
+# 更新或创建测试项
 def update_test_item(request):
     if request.method != 'POST':
         return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
@@ -149,21 +170,26 @@ def update_test_item(request):
         return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"}, status=400)
 
     item_id = data.get('id')
-    if not item_id:
-        return JsonResponse({"code": -1, "message": "缺少 id 参数"}, status=400)
+    is_create = not item_id or item_id == 'new'
 
-    item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
-    if not item:
-        return JsonResponse({"code": -1, "message": "测试项不存在"}, status=404)
+    if is_create:
+        second_tag_id = data.get('second_tag_id')
+        if not second_tag_id:
+            return JsonResponse({"code": -1, "message": "新建测试项需要选择二级标签"}, status=400)
+        item = DB_TestItem(second_tag_id=second_tag_id)
+    else:
+        item = DB_TestItem.objects.filter(id=item_id, is_del=False).first()
+        if not item:
+            return JsonResponse({"code": -1, "message": "测试项不存在"}, status=404)
 
     if data.get('is_del'):
         item.is_del = True
         item.save()
         return JsonResponse({"code": 0, "message": "删除成功"})
 
-    item.name = data.get('name', item.name)
-    item.type = data.get('type', item.type)
-    item.description = data.get('description', item.description)
+    item.name = data.get('name', item.name if not is_create else '未命名')
+    item.type = data.get('type', item.type if not is_create else 1)
+    item.description = data.get('description', item.description if not is_create else '')
 
     interface_id = data.get('interface_id')
     if interface_id is not None:
@@ -173,16 +199,76 @@ def update_test_item(request):
     if cases is not None:
         item.cases = cases
 
+    script_filename = data.get('script_filename')
+    if script_filename is not None:
+        item.script_filename = script_filename
+
+    item.save()
+
     # 保存时重命名上传的 xlsx 文件
     uploaded_filename = data.get('uploaded_filename')
     if uploaded_filename:
         old_path = os.path.join(XLSX_DIR, uploaded_filename)
-        new_name = f"{item.id}_{item.name}.xlsx"
+        new_name = f"{item.id}_{uploaded_filename}"
         new_path = os.path.join(XLSX_DIR, new_name)
         if os.path.exists(old_path) and old_path != new_path:
             if os.path.exists(new_path):
                 os.remove(new_path)
             os.rename(old_path, new_path)
 
-    item.save()
-    return JsonResponse({"code": 0, "message": "更新成功"})
+    # 保存时重命名上传的脚本文件
+    uploaded_script = data.get('uploaded_script')
+    if uploaded_script:
+        old_path = os.path.join(SCRIPTS_DIR, uploaded_script)
+        new_name = f"{item.id}_{uploaded_script}"
+        new_path = os.path.join(SCRIPTS_DIR, new_name)
+        if os.path.exists(old_path) and old_path != new_path:
+            if os.path.exists(new_path):
+                os.remove(new_path)
+            os.rename(old_path, new_path)
+        item.script_filename = new_name
+        item.save(update_fields=['script_filename'])
+
+    return JsonResponse({"code": 0, "message": "保存成功", "id": item.id})
+
+
+# 执行测试
+def execute_run(request):
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    if not request.body:
+        return JsonResponse({"code": -1, "message": "请求体为空"}, status=400)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"}, status=400)
+
+    result, status_code = dispatch_run(data)
+    return JsonResponse(result, status=status_code)
+
+
+# 更新测试结果
+def update_run_result(request):
+    data = json.loads(request.body)
+    run_id = data.get("test_run_id")
+    run_result = DB_run_result.objects.get(id=run_id)
+    run_result.status = data.get("status", "completed")
+    run_result.total = data.get("total")
+    run_result.passed = data.get("passed")
+    run_result.failed = data.get("failed")
+    run_result.skipped = data.get("skipped")
+    run_result.duration_seconds = data.get("duration")
+    run_result.finished_at = data.get("finished_at")
+    run_result.report_file = data.get("report_file", run_result.report_file)
+    run_result.log_file = data.get("log_file", run_result.log_file)
+    run_result.jenkins_build_url = data.get("jenkins_build_url", run_result.jenkins_build_url)
+    run_result.save()
+
+    return JsonResponse({
+        "code": 0,
+        "message": "success",
+        "data": {
+            "test_run_id": run_id,
+            "status": run_result.status
+        }
+    })

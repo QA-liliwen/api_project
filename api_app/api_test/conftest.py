@@ -24,7 +24,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus):
     duration = time.time() - start_at_ts
 
     test_run_id = os.environ.get("TEST_RUN_ID")
-    resp = requests.post("http://127.0.0.1:8000/update_run_result/",
+    base_url = os.environ.get("BASE_URL", "http://127.0.0.100:8000")
+    resp = requests.post(f"{base_url}/update_run_result/",
         json={
             "test_run_id": int(test_run_id),
             "status": status,

@@ -21,7 +21,7 @@
         methods:{
             get_second_tags(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://localhost:8000/get_second_tags/', {
+                axios.get('http://127.0.0.100:8000/get_second_tags/', {
                     params: {first_tag_id: tag_id}
                 }).then(res=>{
                     this.second_tags = res.data.second_tags;
