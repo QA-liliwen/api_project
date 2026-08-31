@@ -4,7 +4,7 @@ import os
 import sys
 import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from api_app.api_test.log_config import get_logger
+from log_config import get_logger
 
 log = get_logger(__name__)
 
@@ -125,7 +125,7 @@ def assert_in(expr, resp, resp_json):
         raise
 
 
-# 断言层
+# 执行主函数
 def run_main(case):
     if case.get('is_active') != 'Y':
         log.debug(f"用例 {case['CaseID']} 未启用")

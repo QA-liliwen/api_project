@@ -4,6 +4,7 @@ from django.db import models
 # 接口数据
 class DB_Interface(models.Model):
     name = models.CharField('接口名称', max_length=200)
+    tag = models.ForeignKey('DB_FirstTag', verbose_name='一级标签', on_delete=models.SET_NULL, null=True, blank=True)
     url = models.CharField('请求URL', max_length=500)
     method = models.CharField('请求方法', max_length=10)
     headers = models.JSONField('请求头', default=dict, blank=True)
@@ -25,7 +26,7 @@ class DB_Interface(models.Model):
 class DB_TestItem(models.Model):
     name = models.CharField('测试项名称', max_length=200, unique=True)
     second_tag = models.ForeignKey('DB_SecondTag', verbose_name='二级标签', on_delete=models.SET_NULL, null=True, blank=True)
-    type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '自定义脚本')], default=1)
+    type = models.IntegerField('项目类型', choices=[(1, '单接口用例'), (2, '多接口脚本')], default=1)
     interface = models.ForeignKey('DB_Interface', verbose_name='关联接口', on_delete=models.SET_NULL, null=True, blank=True)
     cases = models.JSONField("用例数据", default=list, blank=True)
     script_content = models.TextField('脚本内容', blank=True, default='')

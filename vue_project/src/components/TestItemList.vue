@@ -56,7 +56,7 @@
                             <label class="form-label-fixed">项目类型：</label>
                             <select class="form-select" v-model="edit_form.type">
                                 <option :value="1">单接口用例</option>
-                                <option :value="2">自定义脚本</option>
+                                <option :value="2">多接口脚本</option>
                             </select>
                         </div>
                         <div v-if="edit_form.is_create" class="form-row">
@@ -88,8 +88,9 @@
                         </div>
                         <div v-if="edit_form.type === 2 && edit_form.script_filename" class="form-row">
                             <label class="form-label-fixed"></label>
-                            <div style="flex: 1; text-align: left; font-size: 13px; color: #666">
-                                已上传: {{ edit_form.script_filename }}
+                            <div style="flex: 1; display: flex; align-items: center; gap: 8px">
+                                <span style="font-size: 13px; color: #666">已上传: {{ edit_form.script_filename }}</span>
+                                <a class="btn btn-outline-primary btn-sm" :href="'http://127.0.0.100:8000/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
                             </div>
                         </div>
                         <div v-if="edit_form.type === 1" class="form-row">
@@ -126,7 +127,7 @@
                     is_create: false,
                     second_tag_id: null,
                     name: '',
-                    type: 1,
+                    type: 2,
                     description: '',
                     interface_id: null,
                     cases_json: '',
@@ -165,7 +166,7 @@
                 })
             },
             type_name(type){
-                const map = {1: '单接口用例', 2: '自定义脚本'}
+                const map = {1: '单接口用例', 2: '多接口脚本'}
                 return map[type] || '未知'
             },
             is_all_selected(group){
@@ -240,7 +241,7 @@
                     is_create: true,
                     second_tag_id: second_tag_id,
                     name: '',
-                    type: 1,
+                    type: 2,
                     description: '',
                     interface_id: null,
                     cases_json: '',
