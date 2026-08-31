@@ -52,8 +52,7 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">描述</label>
-                    <textarea class="form-control" rows="3" v-model="run_description" placeholder="可选，填写本次执行说明"></textarea>
+                    <textarea class="form-control" rows="3" v-model="run_description" placeholder="填写本次执行说明"></textarea>
                 </div>
 
                 <div style="text-align: right">

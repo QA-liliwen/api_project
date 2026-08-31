@@ -9,12 +9,13 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR)))
 SCRIPTS_DIR = os.path.join(os.path.dirname(BASE_DIR), "data", "scripts")
 
 
-def run_custom(test_item_ids, description, base_url):
-    """执行自定义脚本测试项：写临时文件 → pytest 执行 → 回调平台"""
+def run_custom(test_item_ids, description, base_url, env=''):
+    """执行多接口脚本测试项：写临时文件 → pytest 执行 → 回调平台"""
     started_ts = time.time()
 
     # 创建执行记录
     test_run = DB_run_result.objects.create(
+        env=env,
         status="running",
         description=description,
         test_items=','.join(str(i) for i in test_item_ids),

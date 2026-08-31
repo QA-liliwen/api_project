@@ -26,10 +26,17 @@ urlpatterns = [
     path('get_grouped_test_items/', get_grouped_test_items),
 
     path('upload_case/', upload_case),  # 上传用例xlsx
-    path('upload_script/', upload_script),  # 上传自定义脚本.py
+    path('upload_script/', upload_script),  # 上传多接口脚本.py
+    path('download_script/', download_script),  # 下载脚本文件
     path('get_run_config/', get_run_config),    # 获取执行配置下拉数据
     path('execute_run/', execute_run),  # 执行测试（本地/Jenkins，由 run_mode 区分）
     path('get_test_item_detail/', get_test_item_detail),  # 获取测试项详情（编辑回填）
     path('get_interfaces/', get_interfaces),    # 获取接口列表（编辑下拉）
+    path('get_interface_list/', get_interface_list),  # 接口列表页
+    path('get_interface_detail/', get_interface_detail),  # 接口详情
+    path('update_interface/', update_interface),  # 更新接口
+    path('delete_interface/', delete_interface),  # 软删除接口
+    path('get_run_result_list/', get_run_result_list),  # 测试结果列表页
+    path('download_log/', download_log),  # 下载日志文件
     path('update_test_item/', update_test_item),  # 更新测试项
 ]

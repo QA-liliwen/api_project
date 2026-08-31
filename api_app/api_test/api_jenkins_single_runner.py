@@ -8,29 +8,22 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-# 打包测试文件为独立 zip（去 Django 依赖）
+# 打包测试文件为独立 zip
 def pack_test_bundle(test_run, cases_txt_path):
     cases_filename = os.path.basename(cases_txt_path)
+    # 读取测试txt文件
     with open(cases_txt_path, "r", encoding="utf-8") as f:
         cases_content = f.read()
 
-    # 读取原始文件（tests.py 已合并进 run_request.py）
+    # 读取 conftest 文件
     with open(os.path.join(BASE_DIR, "conftest.py"), "r", encoding="utf-8") as f:
         conftest_content = f.read()
-    conftest_content = conftest_content.replace(
-        '"http://127.0.0.100:8000/update_run_result/"',
-        'f\'{os.environ.get("BASE_URL", "http://127.0.0.100:8000")}/update_run_result/\''
-    )
 
-    # run_request.py: 把 Django import 改成本地 import
+    # 读取 run_request.py 文件
     with open(os.path.join(BASE_DIR, "run_request.py"), "r", encoding="utf-8") as f:
         run_request_content = f.read()
-    run_request_content = run_request_content.replace(
-        'from api_app.api_test.log_config import get_logger',
-        'from log_config import get_logger'
-    )
 
-    # log_config.py: 替换日志目录（Jenkins 端无 data/logs 结构）
+    # 读取 log_config.py 文件
     with open(os.path.join(BASE_DIR, "log_config.py"), "r", encoding="utf-8") as f:
         log_config_content = f.read()
     log_config_content = log_config_content.replace('"../data/logs"', '"logs"')

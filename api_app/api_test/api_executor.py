@@ -49,18 +49,21 @@ def dispatch_run(data):
     type1_ids = [item.id for item in test_items if item.type == 1]
     type2_ids = [item.id for item in test_items if item.type == 2]
 
-    base_url = data.get('base_url', 'http://127.0.0.1:8000')
+    base_url = data.get('base_url', 'http://127.0.0.100:8000')
     results = []
 
-    # --- 先执行单接口用例 (type=1) ---
+    env_id = data.get('env_id')
+    env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
+    env_name = env_obj.name if env_obj else ''
+
+    # 先执行单接口用例
     if type1_ids:
+        # 获取域名、环境、Token和头模板信息
         domain_id = data.get('domain_id')
-        env_id = data.get('env_id')
         token_id = data.get('token_id')
         header_template_id = data.get('header_template_id')
 
         domain_obj = DB_Domain.objects.filter(id=domain_id, is_del=False).first()
-        env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
         token_obj = DB_Token.objects.filter(id=token_id, is_del=False).first()
         header_obj = DB_HeaderTemplate.objects.filter(id=header_template_id, is_del=False).first()
         if not domain_obj or not env_obj:
@@ -71,7 +74,7 @@ def dispatch_run(data):
             headers['token'] = token_obj.token
 
         test_run = DB_run_result.objects.create(
-            env=env_obj.name,
+            env=env_name,
             status="running",
             description=description,
             test_items=','.join(str(i) for i in type1_ids),
@@ -88,6 +91,7 @@ def dispatch_run(data):
             json.dump(all_cases, f, ensure_ascii=False, indent=2)
         test_run.cases_json_file = cases_txt_name
 
+        # 执行用例
         if run_mode == 'jenkins':
             zip_bytes = pack_test_bundle(test_run, cases_txt_path)
             try:
@@ -104,9 +108,9 @@ def dispatch_run(data):
             run_single_local(test_run, cases_txt_path)
             results.append({"type": 1, "run_id": test_run.id})
 
-    # --- 再执行自定义脚本 (type=2) ---
+    # 执行多接口脚本
     if type2_ids:
-        resp, status = run_custom(type2_ids, description, base_url)
+        resp, status = run_custom(type2_ids, description, base_url, env=env_name)
         if status != 200:
             return resp, status
         results.append({"type": 2, "run_id": resp.get("run_id")})

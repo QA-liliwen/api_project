@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import openpyxl
 from django.http import JsonResponse
 from django.utils import timezone
@@ -11,6 +12,7 @@ xlsx_header_en = ['CaseID', 'case_name', 'is_active', 'body', 'expected_status_c
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 XLSX_DIR = os.path.join(BASE_DIR, "data", "xlsx")
 SCRIPTS_DIR = os.path.join(BASE_DIR, "data", "scripts")
+TEMP_DIR = os.path.join(BASE_DIR, "data", "temp")  # 临时文件目录，保存时移走
 
 
 # 一级标签
@@ -55,13 +57,14 @@ def get_run_config(request):
     })
 
 
-# 上传用例文件
+# 上传用例文件（存到临时目录）
 def upload_case(request):
+    os.makedirs(TEMP_DIR, exist_ok=True)
     file = request.FILES.get("fileUpload")
     if not file or not file.name.endswith(".xlsx"):
         return JsonResponse({"msg": "请上传 xlsx 文件"}, status=400)
     upload_xlsx_name = file.name
-    file_path = os.path.join(XLSX_DIR, upload_xlsx_name)
+    file_path = os.path.join(TEMP_DIR, upload_xlsx_name)  # 存到临时目录
     with open(file_path, "wb") as f:
         for chunk in file.chunks():
             f.write(chunk)
@@ -71,18 +74,31 @@ def upload_case(request):
     return JsonResponse({"msg": "解析成功", "cases": test_item_data, "filename": upload_xlsx_name})
 
 
-# 上传自定义脚本文件
+# 上传多接口脚本文件（存到临时目录）
 def upload_script(request):
-    print(f"[upload_script] 被调用, method={request.method}, FILES={list(request.FILES.keys())}")
+    os.makedirs(TEMP_DIR, exist_ok=True)
     file = request.FILES.get("fileUpload")
     if not file or not file.name.endswith(".py"):
         return JsonResponse({"msg": "请上传 .py 文件"}, status=400)
     script_filename = file.name
-    file_path = os.path.join(SCRIPTS_DIR, script_filename)
+    file_path = os.path.join(TEMP_DIR, script_filename)  # 存到临时目录
     with open(file_path, "wb") as f:
         for chunk in file.chunks():
             f.write(chunk)
     return JsonResponse({"msg": "上传成功", "filename": script_filename})
+
+
+# 下载脚本文件
+from django.http import FileResponse, Http404
+
+def download_script(request):
+    filename = request.GET.get('filename', '')
+    if not filename or '..' in filename or '/' in filename:
+        return JsonResponse({"msg": "文件名不合法"}, status=400)
+    file_path = os.path.join(SCRIPTS_DIR, filename)
+    if not os.path.exists(file_path):
+        raise Http404("文件不存在")
+    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
 
 
 # 读取用例文件
@@ -205,27 +221,38 @@ def update_test_item(request):
 
     item.save()
 
-    # 保存时重命名上传的 xlsx 文件
+    # 保存时移动 xlsx 文件从临时目录到正式目录
     uploaded_filename = data.get('uploaded_filename')
     if uploaded_filename:
-        old_path = os.path.join(XLSX_DIR, uploaded_filename)
+        os.makedirs(XLSX_DIR, exist_ok=True)
+        temp_path = os.path.join(TEMP_DIR, uploaded_filename)
         new_name = f"{item.id}_{uploaded_filename}"
-        new_path = os.path.join(XLSX_DIR, new_name)
-        if os.path.exists(old_path) and old_path != new_path:
-            if os.path.exists(new_path):
-                os.remove(new_path)
-            os.rename(old_path, new_path)
+        final_path = os.path.join(XLSX_DIR, new_name)
+        if os.path.exists(temp_path):
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            shutil.move(temp_path, final_path)  # 从临时目录移到正式目录
 
-    # 保存时重命名上传的脚本文件
+    # 保存时移动脚本文件从临时目录到正式目录
     uploaded_script = data.get('uploaded_script')
     if uploaded_script:
-        old_path = os.path.join(SCRIPTS_DIR, uploaded_script)
+        os.makedirs(SCRIPTS_DIR, exist_ok=True)
         new_name = f"{item.id}_{uploaded_script}"
-        new_path = os.path.join(SCRIPTS_DIR, new_name)
-        if os.path.exists(old_path) and old_path != new_path:
-            if os.path.exists(new_path):
-                os.remove(new_path)
-            os.rename(old_path, new_path)
+        
+        # 删除旧脚本文件（避免孤儿文件）
+        old_script_filename = item.script_filename
+        if old_script_filename and old_script_filename != new_name:
+            old_script_path = os.path.join(SCRIPTS_DIR, old_script_filename)
+            if os.path.exists(old_script_path):
+                os.remove(old_script_path)
+        
+        # 从临时目录移到正式目录
+        temp_path = os.path.join(TEMP_DIR, uploaded_script)
+        final_path = os.path.join(SCRIPTS_DIR, new_name)
+        if os.path.exists(temp_path):
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            shutil.move(temp_path, final_path)  # 从临时目录移到正式目录
         item.script_filename = new_name
         item.save(update_fields=['script_filename'])
 
@@ -272,3 +299,131 @@ def update_run_result(request):
             "status": run_result.status
         }
     })
+
+
+# 接口列表
+def get_interface_list(request):
+    interfaces = list(DB_Interface.objects.filter(is_del=False).order_by('sort', 'id').values(
+        'id', 'name', 'url', 'method', 'description', 'sort', 'tag__name', 'tag_id'
+    ))
+    return JsonResponse({"interfaces": interfaces})
+
+
+# 接口详情
+def get_interface_detail(request):
+    iface_id = request.GET.get('id')
+    if not iface_id:
+        return JsonResponse({"code": -1, "message": "缺少 id 参数"}, status=400)
+    iface = DB_Interface.objects.filter(id=iface_id, is_del=False).first()
+    if not iface:
+        return JsonResponse({"code": -1, "message": "接口不存在"}, status=404)
+    return JsonResponse({
+        "code": 0,
+        "data": {
+            "id": iface.id,
+            "name": iface.name,
+            "url": iface.url,
+            "method": iface.method,
+            "headers": iface.headers,
+            "params": iface.params,
+            "description": iface.description,
+            "sort": iface.sort,
+            "tag_id": iface.tag_id,
+        }
+    })
+
+
+# 更新或创建接口
+def update_interface(request):
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    data = json.loads(request.body)
+    iface_id = data.get('id')
+    is_create = iface_id is None
+
+    if is_create:
+        iface = DB_Interface()
+    else:
+        iface = DB_Interface.objects.filter(id=iface_id, is_del=False).first()
+        if not iface:
+            return JsonResponse({"code": -1, "message": "接口不存在"}, status=404)
+
+    iface.name = data.get('name', iface.name if not is_create else '')
+    iface.url = data.get('url', iface.url if not is_create else '')
+    iface.method = data.get('method', iface.method if not is_create else 'GET')
+    iface.description = data.get('description', iface.description if not is_create else '')
+    iface.sort = data.get('sort', iface.sort if not is_create else 0)
+
+    tag_id = data.get('tag_id')
+    if tag_id is not None:
+        iface.tag_id = tag_id if tag_id != '' else None
+
+    headers = data.get('headers')
+    if headers is not None:
+        iface.headers = headers
+
+    params = data.get('params')
+    if params is not None:
+        iface.params = params
+
+    iface.save()
+    return JsonResponse({"code": 0, "message": "保存成功", "id": iface.id})
+
+
+# 软删除接口
+def delete_interface(request):
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    data = json.loads(request.body)
+    iface_id = data.get('id')
+    iface = DB_Interface.objects.filter(id=iface_id, is_del=False).first()
+    if not iface:
+        return JsonResponse({"code": -1, "message": "接口不存在"}, status=404)
+    iface.is_del = True
+    iface.save()
+    return JsonResponse({"code": 0, "message": "删除成功"})
+
+
+# 测试结果列表
+def get_run_result_list(request):
+    jenkins_results = list(DB_run_result.objects.filter(trigger_source='jenkins').order_by('-id')[:20].values(
+        'id', 'description', 'status', 'total', 'passed', 'failed', 'skipped',
+        'started_at', 'finished_at', 'duration_seconds',
+        'trigger_source', 'env', 'jenkins_build_url', 'log_file', 'report_file', 'test_items'
+    ))
+    local_results = list(DB_run_result.objects.exclude(trigger_source='jenkins').order_by('-id')[:20].values(
+        'id', 'description', 'status', 'total', 'passed', 'failed', 'skipped',
+        'started_at', 'finished_at', 'duration_seconds',
+        'trigger_source', 'env', 'jenkins_build_url', 'log_file', 'report_file', 'test_items'
+    ))
+
+    def _enrich(results):
+        for r in results:
+            r['test_type'] = None
+            r['test_item_names'] = []
+            ids = [i.strip() for i in str(r['test_items']).split(',') if i.strip()]
+            if ids:
+                items = DB_TestItem.objects.filter(id__in=ids)
+                r['test_item_names'] = [item.name for item in items]
+                first_item = items.first()
+                if first_item:
+                    r['test_type'] = first_item.type
+        return results
+
+    return JsonResponse({
+        "jenkins": _enrich(jenkins_results),
+        "local": _enrich(local_results),
+    })
+
+
+# 下载日志文件
+LOG_DIR = os.path.join(BASE_DIR, "data", "logs")
+
+def download_log(request):
+    filename = request.GET.get('filename', '')
+    if not filename or '..' in filename or '/' in filename:
+        return JsonResponse({"msg": "文件名不合法"}, status=400)
+    file_path = os.path.join(LOG_DIR, filename)
+    if not os.path.exists(file_path):
+        raise Http404("日志文件不存在")
+    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
