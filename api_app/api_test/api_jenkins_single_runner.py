@@ -6,6 +6,21 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+JENKINS_BASE = "https://172.16.1.240:8443"
+JENKINS_JOB = "Exam_APITest_Platform_Job"
+
+
+# 生成 Jenkins 端使用的 log_config.py 内容（日志目录改为工作区内 logs）
+def build_jenkins_log_config():
+    with open(os.path.join(BASE_DIR, "log_config.py"), "r", encoding="utf-8") as f:
+        content = f.read()
+    content = content.replace('"../data/logs"', '"logs"')
+    content = content.replace(
+        'DEFAULT_FORMAT',
+        'os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"), exist_ok=True)\nDEFAULT_FORMAT',
+        1
+    )
+    return content
 
 
 # 打包测试文件为独立 zip
@@ -23,32 +38,28 @@ def pack_test_bundle(test_run, cases_txt_path):
     with open(os.path.join(BASE_DIR, "run_request.py"), "r", encoding="utf-8") as f:
         run_request_content = f.read()
 
-    # 读取 log_config.py 文件
-    with open(os.path.join(BASE_DIR, "log_config.py"), "r", encoding="utf-8") as f:
-        log_config_content = f.read()
-    log_config_content = log_config_content.replace('"../data/logs"', '"logs"')
-    log_config_content = log_config_content.replace(
-        'DEFAULT_FORMAT',
-        'os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"), exist_ok=True)\nDEFAULT_FORMAT',
-        1
-    )
-
     # 打包 zip
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("conftest.py", conftest_content)
         zf.writestr("run_request.py", run_request_content)
-        zf.writestr("log_config.py", log_config_content)
-        zf.writestr("requirements.txt", "requests\npytest\n")
+        zf.writestr("log_config.py", build_jenkins_log_config())
+        zf.writestr("requirements.txt", "requests\npytest\npytest-html\n")
         zf.writestr(cases_filename, cases_content)
+        # 用例文件与收集规则固化到 pytest.ini，Jenkins 端统一执行 pytest .
+        # run_request.py 不符合 pytest 默认的 test_*.py 命名，需显式加入 python_files
+        zf.writestr(
+            "pytest.ini",
+            f"[pytest]\naddopts = --cases-file={cases_filename}\npython_files = run_request.py test_*.py\n"
+        )
 
     return buf.getvalue()
 
 
 def trigger_jenkins_build(zip_bytes, run_id, base_url):
     """POST 到 Jenkins Job，上传 zip 包，返回构建页面 URL"""
-    jenkins_base = "https://172.16.1.240:8443"
-    jenkins_job_url = f"{jenkins_base}/job/Exam_APITest_Platform_Job/buildWithParameters"
+    jenkins_base = JENKINS_BASE
+    jenkins_job_url = f"{jenkins_base}/job/{JENKINS_JOB}/buildWithParameters"
 
     # 用 Session 保持会话一致性（Cookie + crumb）
     session = requests.Session()

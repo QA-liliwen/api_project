@@ -15,10 +15,17 @@
             <a class="nav-link" style="color: black;margin-right: 20px;font-size: 20px" href="#" @click.prevent="$router.push('/run_results/')"
              :class="{active: $route.path === '/run_results/'}">测试结果</a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" style="color: black;margin-right: 20px;font-size: 20px" href="#" @click.prevent="$router.push('/tools/')"
+             :class="{active: $route.path.indexOf('/tools/') === 0}">工具箱</a>
+          </li>
         </ul>
         <ul class="navbar-nav ms-auto">
           <li class="nav-item">
-            <a class="nav-link" href="http://127.0.0.100:8000/admin/" target="_blank">后台</a>
+            <a class="nav-link" href="https://172.16.1.240:8443/job/Exam_APITest_Platform_Job/" target="_blank">Jenkins</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="http://172.16.2.60:8000/admin/" target="_blank">后台</a>
           </li>
         </ul>
       </div>
@@ -37,7 +44,7 @@
         },
         mounted:function () {
             this.active_tag_id = this.$route.params.tag_id;
-            axios.get('http://127.0.0.100:8000/get_top_menu/').then(res=>{
+            axios.get('http://172.16.2.60:8000/get_top_menu/').then(res=>{
                 this.first_tags = res.data.first_tags;
             })
         },
@@ -63,3 +70,4 @@
         border-bottom: 2px solid #0d6efd;
     }
 </style>
+

@@ -22,7 +22,8 @@
                         <th style="width: 160px">开始时间</th>
                         <th style="width: 160px">结束时间</th>
                         <th style="width: 80px">日志</th>
-                        <th style="width: 80px">操作</th>
+                        <th style="width: 80px">报告</th>
+                        <th style="width: 80px">链接</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -42,16 +43,20 @@
                         <td>{{ format_time(item.started_at) }}</td>
                         <td>{{ format_time(item.finished_at) }}</td>
                         <td>
-                            <a v-if="item.log_file && item.test_type === 1" :href="'http://127.0.0.100:8000/download_log/?filename=' + item.log_file" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
+                            <a v-if="item.log_file && item.jenkins_build_url" :href="item.jenkins_build_url + 'artifact/logs/' + item.log_file" target="_blank" class="btn btn-outline-primary btn-sm" style="font-size: 12px">日志</a>
                             <span v-else style="color: gray">-</span>
                         </td>
                         <td>
-                            <a v-if="item.jenkins_build_url" :href="item.jenkins_build_url" target="_blank" class="btn btn-outline-primary btn-sm" style="font-size: 12px">Jenkins</a>
+                            <a v-if="item.report_file && item.jenkins_build_url" :href="item.jenkins_build_url + 'artifact/' + item.report_file" target="_blank" class="btn btn-outline-success btn-sm" style="font-size: 12px">报告</a>
+                            <span v-else style="color: gray">-</span>
+                        </td>
+                        <td>
+                            <a v-if="item.jenkins_build_url" :href="item.jenkins_build_url" target="_blank" class="btn btn-outline-primary btn-sm" style="font-size: 12px">链接</a>
                             <span v-else style="color: gray">-</span>
                         </td>
                     </tr>
                     <tr v-if="jenkins_results.length === 0">
-                        <td colspan="14" style="color: gray">暂无测试记录</td>
+                        <td colspan="15" style="color: gray">暂无测试记录</td>
                     </tr>
                 </tbody>
             </table>
@@ -96,7 +101,7 @@
                         <td>{{ format_time(item.started_at) }}</td>
                         <td>{{ format_time(item.finished_at) }}</td>
                         <td>
-                            <a v-if="item.log_file && item.test_type === 1" :href="'http://127.0.0.100:8000/download_log/?filename=' + item.log_file" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
+                            <a v-if="item.log_file && item.test_type === 1" :href="'http://172.16.2.60:8000/download_log/?filename=' + item.log_file" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
                             <span v-else style="color: gray">-</span>
                         </td>
                         <td>
@@ -149,7 +154,7 @@
         },
         methods: {
             get_list() {
-                axios.get('http://127.0.0.100:8000/get_run_result_list/').then(res => {
+                axios.get('http://172.16.2.60:8000/get_run_result_list/').then(res => {
                     this.jenkins_results = res.data.jenkins || []
                     this.local_results = res.data.local || []
                 })

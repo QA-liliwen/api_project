@@ -7,7 +7,7 @@
 
 <script>
 import TopMenu from '../components/TopMenu.vue'
-import RunResultList from '../components/RunResultList.vue'
+import RunResultList from '../components/api_test/RunResultList.vue'
 
 export default {
   name: 'RunResultView',

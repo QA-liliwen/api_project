@@ -15,8 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
+from django.views.generic import TemplateView
 from api_app.views_test_item import *
+from api_app.view_tools_item import *
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -39,4 +41,9 @@ urlpatterns = [
     path('get_run_result_list/', get_run_result_list),  # 测试结果列表页
     path('download_log/', download_log),  # 下载日志文件
     path('update_test_item/', update_test_item),  # 更新测试项
+
+    path('get_tools/', get_tools),  # 工具箱工具列表
+    path('run_tool/', run_tool),  # 工具统一执行入口
+
+    re_path(r'^.*$', TemplateView.as_view(template_name='index.html')),  # Vue 前端路由兜底
 ]

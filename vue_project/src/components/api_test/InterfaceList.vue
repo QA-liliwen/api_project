@@ -131,12 +131,12 @@
         },
         methods: {
             get_list() {
-                axios.get('http://127.0.0.100:8000/get_interface_list/').then(res => {
+                axios.get('http://172.16.2.60:8000/get_interface_list/').then(res => {
                     this.interfaces = res.data.interfaces || []
                 })
             },
             get_first_tags() {
-                axios.get('http://127.0.0.100:8000/get_top_menu/').then(res => {
+                axios.get('http://172.16.2.60:8000/get_top_menu/').then(res => {
                     this.first_tags = res.data.first_tags || []
                 })
             },
@@ -165,7 +165,7 @@
                 this.show_modal = true
             },
             open_edit(item) {
-                axios.get('http://127.0.0.100:8000/get_interface_detail/', {
+                axios.get('http://172.16.2.60:8000/get_interface_detail/', {
                     params: {id: item.id}
                 }).then(res => {
                     if (res.data.code === 0) {
@@ -218,7 +218,7 @@
                     headers: headers,
                     params: params,
                 }
-                axios.post('http://127.0.0.100:8000/update_interface/', payload).then(res => {
+                axios.post('http://172.16.2.60:8000/update_interface/', payload).then(res => {
                     if (res.data.code === 0) {
                         this.show_modal = false
                         this.get_list()
@@ -231,7 +231,7 @@
             },
             soft_delete() {
                 if (!confirm('确定要删除这个接口吗？')) return
-                axios.post('http://127.0.0.100:8000/delete_interface/', {
+                axios.post('http://172.16.2.60:8000/delete_interface/', {
                     id: this.edit_form.id
                 }).then(res => {
                     if (res.data.code === 0) {

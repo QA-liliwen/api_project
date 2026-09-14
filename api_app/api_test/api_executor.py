@@ -5,6 +5,7 @@ from api_app.models import *
 from api_app.api_test.api_jenkins_single_runner import *
 from api_app.api_test.api_local_single_runner import *
 from api_app.api_test.api_local_custom_runner import *
+from api_app.api_test.api_jenkins_custom_runner import *
 
 
 # 合并多个测试项的用例数据
@@ -49,7 +50,7 @@ def dispatch_run(data):
     type1_ids = [item.id for item in test_items if item.type == 1]
     type2_ids = [item.id for item in test_items if item.type == 2]
 
-    base_url = data.get('base_url', 'http://127.0.0.100:8000')
+    base_url = data.get('base_url', 'http://172.16.2.60:8000')
     results = []
 
     env_id = data.get('env_id')
@@ -110,9 +111,16 @@ def dispatch_run(data):
 
     # 执行多接口脚本
     if type2_ids:
-        resp, status = run_custom(type2_ids, description, base_url, env=env_name)
+        if run_mode == 'jenkins':
+            resp, status = run_custom_jenkins(type2_ids, description, base_url, env=env_name)
+        else:
+            resp, status = run_custom(type2_ids, description, base_url, env=env_name)
         if status != 200:
             return resp, status
-        results.append({"type": 2, "run_id": resp.get("run_id")})
+        results.append({
+            "type": 2,
+            "run_id": resp.get("run_id"),
+            "jenkins_build_url": resp.get("jenkins_build_url", ""),
+        })
 
     return {"code": 0, "message": "success", "results": results}, 200

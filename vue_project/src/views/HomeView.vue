@@ -17,9 +17,9 @@
 
 <script>
 import TopMenu from '../components/TopMenu.vue'
-import SideMenu from '../components/SideMenu.vue'
-import TestItemList from '../components/TestItemList.vue'
-import RunList from '../components/RunList.vue'
+import SideMenu from '../components/api_test/SideMenu.vue'
+import TestItemList from '../components/api_test/TestItemList.vue'
+import RunList from '../components/api_test/RunList.vue'
 
 export default {
   name: 'HomeView',

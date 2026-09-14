@@ -31,6 +31,7 @@ class DB_TestItem(models.Model):
     cases = models.JSONField("用例数据", default=list, blank=True)
     script_content = models.TextField('脚本内容', blank=True, default='')
     script_filename = models.CharField('脚本文件名', max_length=255, blank=True, default='')
+    doc_link = models.CharField('文档链接', max_length=500, blank=True, default='')
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -159,3 +160,22 @@ class DB_HeaderTemplate(models.Model):
 
     def __str__(self):
         return f"{self.name}"
+
+
+# 工具箱
+# tool_key 同时作为前端组件映射 key 与后端注册表 key，上线后不得修改
+class DB_Tool(models.Model):
+    name = models.CharField('工具名称', max_length=100)
+    tool_key = models.CharField('工具标识', max_length=50, unique=True)
+    category = models.CharField('分类', max_length=50, null=True, blank=True)
+    description = models.TextField('工具说明', null=True, blank=True)
+    is_del = models.BooleanField('是否删除', default=False)
+    sort = models.IntegerField('序号', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '10_工具表'
+        verbose_name_plural = '10_工具表'
+
+    def __str__(self):
+        return f"{self.id} {self.name} ({self.tool_key})"

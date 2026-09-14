@@ -16,6 +16,7 @@
                         </th>
                         <th style="width: 40%">测试项名称</th>
                         <th style="width: 100px">项目类型</th>
+                        <th style="width: 100px">接口文档</th>
                         <th>描述</th>
                         <th style="width: 75px">
                             <button class="btn btn-outline-secondary btn-sm" @click.stop="group.collapsed = !group.collapsed" style="border: 0px">
@@ -29,11 +30,12 @@
                         <td><input type="checkbox" class="form-check-input" :value="item.id" v-model="checked_ids" @change="up_checked" @click.stop></td>
                         <td style="text-align: left; padding-left: 16px">{{ item.name }} <span v-if="item.type === 2" class="script-badge">[Script]</span></td>
                         <td>{{ type_name(item.type) }}</td>
+                        <td @click.stop><a v-if="item.doc_link" :href="item.doc_link" target="_blank">链接</a><span v-else style="color: #ccc">-</span></td>
                         <td>{{ item.description }}</td>
                         <td @click.stop><button class="btn btn-outline-primary btn-sm" @click="open_edit(item)" style="border: 0px">编辑</button></td>
                     </tr>
                     <tr v-if="group.test_items.length === 0">
-                        <td colspan="5" style="color: gray; font-size: 16px">暂无测试项</td>
+                        <td colspan="6" style="color: gray; font-size: 16px">暂无测试项</td>
                     </tr>
                 </tbody>
             </table>
@@ -73,6 +75,10 @@
                             </select>
                         </div>
                         <div class="form-row">
+                            <label class="form-label-fixed">文档链接：</label>
+                            <input type="text" class="form-control" v-model="edit_form.doc_link" placeholder="接口文档 URL（可留空）">
+                        </div>
+                        <div class="form-row">
                             <label class="form-label-fixed">描 述：</label>
                             <input class="form-control" rows="2" v-model="edit_form.description"></input>
                         </div>
@@ -90,7 +96,7 @@
                             <label class="form-label-fixed"></label>
                             <div style="flex: 1; display: flex; align-items: center; gap: 8px">
                                 <span style="font-size: 13px; color: #666">已上传: {{ edit_form.script_filename }}</span>
-                                <a class="btn btn-outline-primary btn-sm" :href="'http://127.0.0.100:8000/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
+                                <a class="btn btn-outline-primary btn-sm" :href="'http://172.16.2.60:8000/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
                             </div>
                         </div>
                         <div v-if="edit_form.type === 1" class="form-row">
@@ -113,7 +119,7 @@
 
 <script>
     import axios from 'axios'
-    import bus from '../bus'
+    import bus from '../../bus'
     export default {
         data(){
             return{
@@ -145,7 +151,7 @@
         methods:{
             get_groups(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://127.0.0.100:8000/get_grouped_test_items/', {
+                axios.get('http://172.16.2.60:8000/get_grouped_test_items/', {
                     params: {first_tag_id: tag_id}
                 }).then(res=>{
                     this.groups = res.data.groups.map(g => ({...g, collapsed: false}));
@@ -153,13 +159,13 @@
                 })
             },
             get_interfaces(){
-                axios.get('http://127.0.0.100:8000/get_interfaces/').then(res => {
+                axios.get('http://172.16.2.60:8000/get_interfaces/').then(res => {
                     this.interfaces = res.data.interfaces || [];
                 })
             },
             get_second_tags(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://127.0.0.100:8000/get_second_tags/', {
+                axios.get('http://172.16.2.60:8000/get_second_tags/', {
                     params: {first_tag_id: tag_id}
                 }).then(res => {
                     this.second_tags = res.data.second_tags || [];
@@ -211,7 +217,7 @@
                 return names
             },
             open_edit(item){
-                axios.get('http://127.0.0.100:8000/get_test_item_detail/', {
+                axios.get('http://172.16.2.60:8000/get_test_item_detail/', {
                     params: {id: item.id}
                 }).then(res => {
                     if (res.data.code === 0) {
@@ -227,6 +233,7 @@
                             cases_json: JSON.stringify(d.cases, null, 2),
                             uploaded_filename: '',
                             script_filename: d.script_filename || '',
+                            doc_link: d.doc_link || '',
                             uploaded_script: '',
                         };
                         this.show_modal = true;
@@ -247,6 +254,7 @@
                     cases_json: '',
                     uploaded_filename: '',
                     script_filename: '',
+                    doc_link: '',
                     uploaded_script: '',
                 };
                 this.show_modal = true;
@@ -258,7 +266,7 @@
                 }
                 const formData = new FormData();
                 formData.append('fileUpload', fileInput.files[0]);
-                axios.post('http://127.0.0.100:8000/upload_case/', formData, {
+                axios.post('http://172.16.2.60:8000/upload_case/', formData, {
                     headers: {'Content-Type': 'multipart/form-data'}
                 }).then(res => {
                     if (res.data.cases) {
@@ -278,7 +286,7 @@
                 }
                 const formData = new FormData();
                 formData.append('fileUpload', scriptInput.files[0]);
-                axios.post('http://127.0.0.100:8000/upload_script/', formData, {
+                axios.post('http://172.16.2.60:8000/upload_script/', formData, {
                     headers: {'Content-Type': 'multipart/form-data'}
                 }).then(res => {
                     if (res.data.filename) {
@@ -321,6 +329,7 @@
                     name: this.edit_form.name,
                     type: this.edit_form.type,
                     description: this.edit_form.description,
+                    doc_link: this.edit_form.doc_link,
                     // type=1 传接口和用例，type=2 置空
                     interface_id: isScript ? null : this.edit_form.interface_id,
                     cases: isScript ? [] : cases,
@@ -328,7 +337,7 @@
                     uploaded_filename: isScript ? '' : this.edit_form.uploaded_filename,
                     uploaded_script: isScript ? this.edit_form.uploaded_script : '',
                 };
-                axios.post('http://127.0.0.100:8000/update_test_item/', payload).then(res => {
+                axios.post('http://172.16.2.60:8000/update_test_item/', payload).then(res => {
                     if (res.data.code === 0) {
                         this.show_modal = false;
                         this.get_groups();
@@ -341,7 +350,7 @@
             },
             soft_delete(){
                 if (!confirm('确定要删除这个测试项吗？')) return;
-                axios.post('http://127.0.0.100:8000/update_test_item/', {
+                axios.post('http://172.16.2.60:8000/update_test_item/', {
                     id: this.edit_form.id,
                     is_del: true
                 }).then(res => {

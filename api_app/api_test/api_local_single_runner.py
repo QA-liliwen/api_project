@@ -17,11 +17,10 @@ def run_single_local(test_run, cases_txt_path):
     # 启动 pytest 子进程
     pytest_env = os.environ.copy()
     pytest_env["TEST_RUN_ID"] = str(test_run.id)
-    pytest_env["CASES_FILE"] = cases_txt_path
     pytest_env["LOG_FILE_NAME"] = log_file_name
     pytest_env['STARTED_AT'] = str(started_ts)
     subprocess.Popen(
-        ["pytest", os.path.join(BASE_DIR, "run_request.py"), "-v"],
+        ["pytest", os.path.join(BASE_DIR, "run_request.py"), "-v", f"--cases-file={cases_txt_path}"],
         env=pytest_env,
         cwd=BASE_DIR,
     )

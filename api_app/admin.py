@@ -13,3 +13,10 @@ admin.site.register(DB_HeaderTemplate)
 @admin.register(DB_run_result)
 class DBRunResultAdmin(admin.ModelAdmin):
     list_display = ('id', 'test_items', 'description', 'started_at', 'finished_at', 'status', 'total', 'passed', 'failed')
+
+
+@admin.register(DB_Tool)
+class DBToolAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'tool_key', 'category', 'sort', 'is_del')
+    list_editable = ('sort', 'is_del')
+    list_filter = ('category', 'is_del')

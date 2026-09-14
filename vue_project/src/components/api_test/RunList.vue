@@ -68,7 +68,7 @@
 
 <script>
     import axios from 'axios'
-    import bus from '../bus'
+    import bus from '../../bus'
     export default {
         data(){
             return{
@@ -100,7 +100,7 @@
         },
         methods:{
             get_config(){
-                axios.get('http://127.0.0.100:8000/get_run_config/').then(res=>{
+                axios.get('http://172.16.2.60:8000/get_run_config/').then(res=>{
                     this.domains = res.data.domains;
                     this.envs = res.data.envs;
                     this.tokens = res.data.tokens;
@@ -124,7 +124,7 @@
                     run_mode: this.run_mode,
                 };
 
-                axios.post('http://127.0.0.100:8000/execute_run/', payload).then(res=>{
+                axios.post('http://172.16.2.60:8000/execute_run/', payload).then(res=>{
                     this.show_dialog = false;
                     this.run_description = '';
                     const results = res.data.results || [];

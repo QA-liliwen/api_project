@@ -187,15 +187,19 @@ if __name__ == '__main__':
 
 
 # ===== pytest 入口 =====
-cases_file = os.environ.get("CASES_FILE")
-if cases_file:
+def pytest_generate_tests(metafunc):
+    cases_file = metafunc.config.getoption("--cases-file") or os.environ.get("CASES_FILE")
+    if not cases_file:
+        return
     with open(cases_file, "r", encoding="utf-8") as f:
         cases_data = json.load(f)
 
-    @pytest.mark.parametrize(
+    metafunc.parametrize(
         "case",
         cases_data,
         ids=[c['CaseID'] for c in cases_data]
     )
-    def test_api(case):
-        run_main(case)
+
+
+def test_api(case):
+    run_main(case)

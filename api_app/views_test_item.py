@@ -34,7 +34,7 @@ def get_grouped_test_items(request):
     second_tags = DB_SecondTag.objects.filter(is_del=False, first_tag_id=first_tag_id).order_by('sort', 'id')
     groups = []
     for tag in second_tags:
-        items = list(DB_TestItem.objects.filter(is_del=False, second_tag=tag).order_by('sort', 'id').values('id', 'name', 'type', 'description', 'created_at'))
+        items = list(DB_TestItem.objects.filter(is_del=False, second_tag=tag).order_by('sort', 'id').values('id', 'name', 'type', 'description', 'doc_link', 'created_at'))
         groups.append({
             "second_tag_id": tag.id,
             "second_tag_name": tag.name,
@@ -163,6 +163,7 @@ def get_test_item_detail(request):
             "cases": item.cases,
             "script_content": item.script_content,
             "script_filename": item.script_filename,
+            "doc_link": item.doc_link,
             "sort": item.sort,
         }
     })
@@ -206,6 +207,7 @@ def update_test_item(request):
     item.name = data.get('name', item.name if not is_create else '未命名')
     item.type = data.get('type', item.type if not is_create else 1)
     item.description = data.get('description', item.description if not is_create else '')
+    item.doc_link = data.get('doc_link', item.doc_link if not is_create else '')
 
     interface_id = data.get('interface_id')
     if interface_id is not None:

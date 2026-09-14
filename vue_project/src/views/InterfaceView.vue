@@ -7,7 +7,7 @@
 
 <script>
 import TopMenu from '../components/TopMenu.vue'
-import InterfaceList from '../components/InterfaceList.vue'
+import InterfaceList from '../components/api_test/InterfaceList.vue'
 
 export default {
   name: 'InterfaceView',
