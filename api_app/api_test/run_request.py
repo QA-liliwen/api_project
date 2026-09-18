@@ -5,6 +5,7 @@ import sys
 import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from log_config import get_logger
+from sql_assert import run_sql_assertion, parse_sql_assert_expr, extract_db_value, smart_equal
 
 log = get_logger(__name__)
 
@@ -125,6 +126,76 @@ def assert_in(expr, resp, resp_json):
         raise
 
 
+# 变量提取: set:变量名=JSON路径，从响应提取变量入变量池（供后续 sql: 的 ${var} 引用）
+def assert_set(expr, variables, resp, resp_json):
+    name, sep, path = expr.partition('=')
+    if not sep or not name.strip() or not path.strip():
+        raise AssertionError(f"变量提取格式错误（正确格式 set:变量名=JSON路径）: set:{expr}")
+    name = name.strip()
+    try:
+        value = extract_by_path(resp_json, path.strip())
+    except (KeyError, IndexError, TypeError):
+        log.error(f"变量提取失败: {name} <- {path.strip()}（路径不存在）")
+        raise AssertionError(f"变量提取失败: {name} <- {path.strip()}（路径不存在）")
+    variables[name] = value
+    log.debug(f"变量提取: {name} = {value}")
+
+
+# SQL 断言（落库校验）:
+# 三方校验: sql:select answer from t where id=${qid}=/data/answer='c'
+#   查库值、入参值 都与手输预期值比较
+# 省略预期值: sql:select solution from t where id=${qid}=/questions/0/solution
+#   两方校验：查库值 == 入参值（库内存 JSON 字符串时自动解析后深度比较）
+# 库名为空或连接四要素缺失时跳过（不报错），其余异常往上抛
+def assert_sql(expr, sql_database, variables, body=None):
+    # 传入的 断言内容， sql库， 变量池后，返回 断言表达式, 查询结果
+    parsed = run_sql_assertion(expr, sql_database, variables)
+    if parsed is None:
+        return
+    assert_expr, result = parsed
+    # 解析断言表达式部分: =/data/answer='c' -> =, /data/answer, 'c'
+    path, op, expected = parse_sql_assert_expr(assert_expr)
+    expected = convert_expected(expected) if expected is not None else None
+
+    # 路径作用于入参
+    if not isinstance(body, (dict, list)):
+        raise AssertionError(f"入参不是JSON对象，无法按入参路径断言: {path}")
+    column = path.strip('/').split('/')[-1]
+    try:
+        req_value = extract_by_path(body, path)
+    except (KeyError, IndexError, TypeError):
+        log.error(f"入参路径不存在: {path}")
+        raise AssertionError(f"入参路径不存在: {path}")
+    db_value = extract_db_value(result, path)
+
+    # 省略预期值：查库值 == 入参值（两方校验，JSON 归一化）
+    if expected is None:
+        log.debug(f"SQL断言(落库比对): 字段={column} 查库值={db_value!r} 入参值={req_value!r}")
+        if not smart_equal(db_value, req_value):
+            msg = f"SQL断言失败: 查库值 {column}={db_value!r} != 入参值 {path}={req_value!r}"
+            log.error(msg)
+            raise AssertionError(msg)
+        return
+
+    # 三方校验：入参值、查库值 都与预期值比较（= 比较带 JSON 归一化）
+    def sql_op(a, e):
+        if op in ('=', '==') and smart_equal(a, e):
+            return True
+        return OPS[op](a, e)
+
+    log.debug(f"SQL断言(落库校验): 字段={column} 查库值={db_value} 入参值={req_value} {op} 期望={expected}")
+    try:
+        assert sql_op(req_value, expected), f"入参值 {path}={req_value} {op} 期望={expected}"
+    except AssertionError:
+        log.error(f"SQL断言失败(入参值): {path} 实际={req_value} {op} 期望={expected}")
+        raise
+    try:
+        assert sql_op(db_value, expected), f"查库值 {column}={db_value} {op} 期望={expected}"
+    except AssertionError:
+        log.error(f"SQL断言失败(查库值): {column} 实际={db_value} {op} 期望={expected}")
+        raise
+
+
 # 执行主函数
 def run_main(case):
     if case.get('is_active') != 'Y':
@@ -133,11 +204,13 @@ def run_main(case):
 
     resp = run_request(url=case['url'], method=case['method'], headers=case['headers'], body=case.get('body', ''))
     log.info(f"状态码断言: 实际={resp.status_code}, 期望={case['expected_status_code']}")
-    assert resp.status_code == case[
-        'expected_status_code'], f"状态码: 实际={resp.status_code}, 期望={case['expected_status_code']}"
+    assert resp.status_code == case['expected_status_code'], f"状态码: 实际={resp.status_code}, 期望={case['expected_status_code']}"
     log.info(f"数据断言: {case['assertions']}")
     log.info(f"响应体: {resp.text[:1000]}")
     resp_json = resp.json()
+
+    # 每条用例独立变量池（set: 提取，后续 sql: 的 ${var} 引用）
+    variables = {}
 
     for assertion_str in case['assertions']:
         # 如果断言中存在冒号，依据ASSERT_HANDLERS指向对应函数
@@ -148,7 +221,17 @@ def run_main(case):
             'header': assert_header,
             'in': assert_in,
         }
+        # 分离断言的前缀和冒号和剩余内容， 
         prefix, sep, rest = assertion_str.partition(':')
+
+        # set: 变量提取 / sql: 数据库断言（需变量池与库名，单独分发）
+        if sep and prefix == 'set':
+            assert_set(rest, variables, resp, resp_json)
+            continue
+        if sep and prefix == 'sql':
+            assert_sql(rest, case.get('sql_database', ''), variables, case.get('body'))
+            continue
+
         handler = ASSERT_HANDLERS.get(prefix) if sep else None
         if handler:
             # 如果断言使用了内置函数，传递断言内容，完整响应，响应体到对应函数

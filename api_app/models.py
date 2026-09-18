@@ -15,8 +15,8 @@ class DB_Interface(models.Model):
     sort = models.IntegerField('序号', null=True, blank=True, default=0)
 
     class Meta:
-        verbose_name = '1_接口表'
-        verbose_name_plural = '1_接口表'
+        verbose_name = '01_接口表'
+        verbose_name_plural = '01_接口表'
 
     def __str__(self):
         return f"{self.id} {self.name} ({self.url})"
@@ -32,14 +32,15 @@ class DB_TestItem(models.Model):
     script_content = models.TextField('脚本内容', blank=True, default='')
     script_filename = models.CharField('脚本文件名', max_length=255, blank=True, default='')
     doc_link = models.CharField('文档链接', max_length=500, blank=True, default='')
+    sql_database = models.CharField('SQL库名', max_length=200, blank=True, default='')
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     sort = models.IntegerField("序号", null=True, blank=True)
 
     class Meta:
-        verbose_name = '2_测试项表'
-        verbose_name_plural = '2_测试项表'
+        verbose_name = '02_测试项表'
+        verbose_name_plural = '02_测试项表'
 
     def __str__(self):
         return f"{self.id} {self.name}"
@@ -69,8 +70,8 @@ class DB_run_result(models.Model):
     report_file = models.CharField("测试报告文件名", max_length=255, blank=True, null=True, default="")
 
     class Meta:
-        verbose_name = '3_测试记录表'
-        verbose_name_plural = '3_测试记录表'
+        verbose_name = '03_测试记录表'
+        verbose_name_plural = '03_测试记录表'
 
     def __str__(self):
         return f"{self.id} {self.description} {self.test_items}"
@@ -83,8 +84,8 @@ class DB_FirstTag(models.Model):
     sort = models.IntegerField("序号", null=True, blank=True)
 
     class Meta:
-        verbose_name = '4_一级标签'
-        verbose_name_plural = '4_一级标签'
+        verbose_name = '04_一级标签'
+        verbose_name_plural = '04_一级标签'
 
     def __str__(self):
         return f"{self.id} {self.name}"
@@ -98,8 +99,8 @@ class DB_SecondTag(models.Model):
     sort = models.IntegerField("序号", null=True, blank=True)
 
     class Meta:
-        verbose_name = '5_二级标签'
-        verbose_name_plural = '5_二级标签'
+        verbose_name = '05_二级标签'
+        verbose_name_plural = '05_二级标签'
 
     def __str__(self):
         return f"{self.first_tag_id}_{self.id} {self.name}"
@@ -112,8 +113,8 @@ class DB_Domain(models.Model):
     is_del = models.BooleanField('是否删除', default=False)
 
     class Meta:
-        verbose_name = '6_域名表'
-        verbose_name_plural = '6_域名表'
+        verbose_name = '06_域名表'
+        verbose_name_plural = '06_域名表'
 
     def __str__(self):
         return f"{self.name} {self.domain}"
@@ -126,8 +127,8 @@ class DB_Env(models.Model):
     is_del = models.BooleanField('是否删除', default=False)
 
     class Meta:
-        verbose_name = '7_环境表'
-        verbose_name_plural = '7_环境表'
+        verbose_name = '07_环境表'
+        verbose_name_plural = '07_环境表'
 
     def __str__(self):
         return f"{self.name} {self.env}"
@@ -141,8 +142,8 @@ class DB_Token(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = '8_Token表'
-        verbose_name_plural = '8_Token表'
+        verbose_name = '08_Token表'
+        verbose_name_plural = '08_Token表'
 
     def __str__(self):
         return f"{self.name} {self.token}"
@@ -155,11 +156,28 @@ class DB_HeaderTemplate(models.Model):
     is_del = models.BooleanField('是否删除', default=False)
 
     class Meta:
-        verbose_name = '9_请求头模板表'
-        verbose_name_plural = '9_请求头模板表'
+        verbose_name = '09_请求头模板表'
+        verbose_name_plural = '09_请求头模板表'
 
     def __str__(self):
         return f"{self.name}"
+
+
+# SQL 连接配置
+class DB_SqlEnv(models.Model):
+    env_name = models.CharField('环境名称', max_length=50, unique=True)  # 与 DB_Domain.domain 对应，如 devapi1.lingshi.com
+    host = models.CharField('主机', max_length=200)
+    port = models.IntegerField('端口', default=3306)
+    user = models.CharField('账号', max_length=100)
+    password = models.CharField('密码', max_length=200)
+    is_del = models.BooleanField('是否删除', default=False)
+
+    class Meta:
+        verbose_name = '10_SQL连接表'
+        verbose_name_plural = '10_SQL连接表'
+
+    def __str__(self):
+        return f"{self.env_name} {self.host}:{self.port}"
 
 
 # 工具箱
@@ -174,8 +192,8 @@ class DB_Tool(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = '10_工具表'
-        verbose_name_plural = '10_工具表'
+        verbose_name = '11_工具表'
+        verbose_name_plural = '11_工具表'
 
     def __str__(self):
         return f"{self.id} {self.name} ({self.tool_key})"

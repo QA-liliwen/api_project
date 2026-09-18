@@ -202,20 +202,34 @@ def run(params):
     infos = []
 
     # 第零步：dim 登录拿 accessToken（三个环境通用，统一从测试环境拿）
+    # 后续接口全部依赖它，失败时没有可展示的数据，直接抛错交视图层处理
     dim_token = get_dim_token('https://devapi1.lingshi.com/dim/vs2')
 
-    # 第一步：dim 系统拿 OSS 临时密码（后续接口依赖它，失败则整体失败）
-    password = apply_dim_password(username, config['dim_base'], dim_token)
-    infos.append({"label": "OSS 临时密码", "value": password})
+    # 第一步：dim 系统拿 OSS 临时密码（oss/app 登录都依赖它）
+    # 单步失败不再整体中断：错误写入 infos 带 error 标记，已成功步骤的数据照常展示
+    password = None
+    try:
+        password = apply_dim_password(username, config['dim_base'], dim_token)
+        infos.append({"label": "OSS 临时密码", "value": password})
+    except ToolError as e:
+        infos.append({"label": "OSS 临时密码", "value": f"获取失败: {e}", "error": True})
 
-    # 第二步：oss doLogin 拿用户信息与 token
-    user_info = oss_dologin(username, password, config['oss_base'])
-    oss_fields = ('userName', 'instId', 'instCode', 'token', 'serverId', 'userId')
-    for field in oss_fields:
-        infos.append({"label": f"OSS {field}", "value": str(user_info.get(field, ''))})
+    # 第二步：oss doLogin 拿用户信息与 token（依赖临时密码，没拿到则跳过）
+    if password:
+        try:
+            user_info = oss_dologin(username, password, config['oss_base'])
+            oss_fields = ('userName', 'instId', 'instCode', 'token', 'serverId', 'userId')
+            for field in oss_fields:
+                infos.append({"label": f"OSS {field}", "value": str(user_info.get(field, ''))})
+        except ToolError as e:
+            infos.append({"label": "OSS 用户信息", "value": f"获取失败: {e}", "error": True})
 
-    # 第三步：app V2 登录拿 app token（key 同样是 L...S 编码）
-    app_data = app_login(username, password, config['app_server'])
-    infos.append({"label": "APP token", "value": app_data.get('token', '')})
+    # 第三步：app V2 登录拿 app token（key 同样是 L...S 编码，依赖临时密码）
+    if password:
+        try:
+            app_data = app_login(username, password, config['app_server'])
+            infos.append({"label": "APP token", "value": app_data.get('token', '')})
+        except ToolError as e:
+            infos.append({"label": "APP token", "value": f"获取失败: {e}", "error": True})
 
     return {"infos": infos}

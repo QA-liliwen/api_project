@@ -20,3 +20,9 @@ class DBToolAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'tool_key', 'category', 'sort', 'is_del')
     list_editable = ('sort', 'is_del')
     list_filter = ('category', 'is_del')
+
+
+@admin.register(DB_SqlEnv)
+class DBSqlEnvAdmin(admin.ModelAdmin):
+    list_display = ('id', 'env_name', 'host', 'port', 'user', 'is_del')
+    list_editable = ('is_del',)

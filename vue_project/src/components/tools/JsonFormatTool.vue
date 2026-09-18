@@ -2,12 +2,22 @@
     <div>
         <div class="form-row">
             <label>操作</label>
-            <select class="form-select form-select-sm" style="width: 200px" v-model="mode">
-                <option value="pretty">美化</option>
-                <option value="minify">压缩</option>
-                <option value="escape">转义</option>
-                <option value="unescape">去转义</option>
-            </select>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="mode-pretty" value="pretty" v-model="mode">
+                <label class="form-check-label" for="mode-pretty">美化</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="mode-minify" value="minify" v-model="mode">
+                <label class="form-check-label" for="mode-minify">压缩</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="mode-escape" value="escape" v-model="mode">
+                <label class="form-check-label" for="mode-escape">转义</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" id="mode-unescape" value="unescape" v-model="mode">
+                <label class="form-check-label" for="mode-unescape">去转义</label>
+            </div>
             <button class="btn btn-primary btn-sm" style="margin-left: 15px" :disabled="loading" @click="run">
                 {{ loading ? '处理中...' : '执行' }}
             </button>
@@ -21,7 +31,7 @@
         <div>
             <div class="result-title">
                 <label style="font-size: 14px">结果<span v-if="length" style="color: #888">（{{ length }} 字符）</span></label>
-                <button class="btn btn-outline-secondary btn-sm" :disabled="!result" @click="copy">复制</button>
+                <button class="btn btn-outline-secondary btn-sm" style="margin-left: 10px" :disabled="!result" @click="copy">复制</button>
             </div>
             <textarea class="form-control" rows="12" readonly :value="result"></textarea>
         </div>
@@ -80,10 +90,13 @@
         width: 60px;
         font-size: 14px;
     }
+    /* 单选框的文字标签不受 60px 宽度约束 */
+    .form-row .form-check-label{
+        width: auto;
+    }
     .result-title{
         display: flex;
         align-items: center;
-        justify-content: space-between;
         margin-bottom: 6px;
     }
 </style>

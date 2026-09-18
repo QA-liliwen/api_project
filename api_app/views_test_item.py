@@ -164,6 +164,7 @@ def get_test_item_detail(request):
             "script_content": item.script_content,
             "script_filename": item.script_filename,
             "doc_link": item.doc_link,
+            "sql_database": item.sql_database,
             "sort": item.sort,
         }
     })
@@ -208,6 +209,7 @@ def update_test_item(request):
     item.type = data.get('type', item.type if not is_create else 1)
     item.description = data.get('description', item.description if not is_create else '')
     item.doc_link = data.get('doc_link', item.doc_link if not is_create else '')
+    item.sql_database = data.get('sql_database', item.sql_database if not is_create else '')
 
     interface_id = data.get('interface_id')
     if interface_id is not None:

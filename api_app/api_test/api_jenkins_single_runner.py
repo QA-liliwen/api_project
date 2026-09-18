@@ -38,13 +38,18 @@ def pack_test_bundle(test_run, cases_txt_path):
     with open(os.path.join(BASE_DIR, "run_request.py"), "r", encoding="utf-8") as f:
         run_request_content = f.read()
 
+    # 读取 sql_assert.py 文件（SQL 断言执行器，run_request.py 依赖它）
+    with open(os.path.join(BASE_DIR, "sql_assert.py"), "r", encoding="utf-8") as f:
+        sql_assert_content = f.read()
+
     # 打包 zip
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("conftest.py", conftest_content)
         zf.writestr("run_request.py", run_request_content)
+        zf.writestr("sql_assert.py", sql_assert_content)
         zf.writestr("log_config.py", build_jenkins_log_config())
-        zf.writestr("requirements.txt", "requests\npytest\npytest-html\n")
+        zf.writestr("requirements.txt", "requests\npytest\npytest-html\npymysql\n")
         zf.writestr(cases_filename, cases_content)
         # 用例文件与收集规则固化到 pytest.ini，Jenkins 端统一执行 pytest .
         # run_request.py 不符合 pytest 默认的 test_*.py 命名，需显式加入 python_files
@@ -56,7 +61,7 @@ def pack_test_bundle(test_run, cases_txt_path):
     return buf.getvalue()
 
 
-def trigger_jenkins_build(zip_bytes, run_id, base_url):
+def trigger_jenkins_build(zip_bytes, run_id, base_url, sql_conn=None):
     """POST 到 Jenkins Job，上传 zip 包，返回构建页面 URL"""
     jenkins_base = JENKINS_BASE
     jenkins_job_url = f"{jenkins_base}/job/{JENKINS_JOB}/buildWithParameters"
@@ -81,6 +86,9 @@ def trigger_jenkins_build(zip_bytes, run_id, base_url):
         'BASE_URL': base_url,
         crumb_field: crumb_value,  # 同时作为表单字段
     }
+    # SQL 断言连接四要素（Jenkins job 需声明同名 4 个参数）
+    if sql_conn:
+        data.update(sql_conn)
 
     resp = session.post(jenkins_job_url, files=files, data=data, timeout=30)
     if resp.status_code not in (200, 201):

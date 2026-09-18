@@ -25,10 +25,17 @@
             </button>
         </div>
 
+        <div class="account-row" v-for="group in accountGroups" :key="group.env">
+            <span class="group-label">{{ group.label }}</span>
+            <span v-for="acc in group.accounts" :key="acc" class="account-item"
+                  :class="{'item-active': env === group.env && username === acc}"
+                  @click="quickQuery(group.env, acc)">{{ acc }}</span>
+        </div>
+
         <div class="result-box" v-if="infos.length">
             <div class="result-line" v-for="item in infos" :key="item.label">
                 <span class="result-label">{{ item.label }}</span>
-                <span class="result-value" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
+                <span class="result-value" :class="{'error-value': item.error}" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
             </div>
         </div>
     </div>
@@ -44,9 +51,23 @@
                 username: '',
                 infos: [],
                 loading: false,
+                accountGroups: [
+                    {env: 'test', label: '测试', accounts: ['adminexam', 'adminvswrr', 'adminfmf', 'admincontent', 'adminqa9515']},
+                    {env: 'pre', label: '预发布', accounts: ['adminexam', 'adminxswrr']},
+                    {env: 'prod', label: '生产', accounts: ['adminexam', 'adminvswrr', 'adminfmf', 'adminlsllw']},
+                ],
             }
         },
         methods:{
+            // 右侧常用账号点击：切换环境+填用户名，直接触发查询
+            quickQuery(env, username){
+                if (this.loading) {
+                    return;
+                }
+                this.env = env;
+                this.username = username;
+                this.run();
+            },
             run(){
                 if (!this.username.trim()) {
                     alert('请输入用户名');
@@ -57,6 +78,12 @@
                     tool_key: 'user_info',
                     params: {username: this.username.trim(), env: this.env}
                 }).then(res=>{
+                    // 业务失败（如 dim 登录都失败）：后端返回 code:-1，提示原因
+                    if (res.data.code === -1) {
+                        alert(res.data.message);
+                        this.loading = false;
+                        return;
+                    }
                     this.infos = res.data.data.infos || [];
                     this.loading = false;
                 }).catch(()=>{
@@ -96,6 +123,41 @@
         background-color: #f8f9fa;
         border-radius: 4px;
     }
+    /* 常用账号：按环境分行展示在输入框下方，行首 label 与表单 label 对齐 */
+    .account-row{
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+    .group-label{
+        width: 60px;
+        flex-shrink: 0;
+        font-size: 13px;
+        color: #888;
+    }
+    /* 账号标签：圆角小徽章，点击即查询 */
+    .account-item{
+        display: inline-block;
+        padding: 2px 10px;
+        margin: 0 6px 6px 0;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    .account-item:hover{
+        border-color: #0d6efd;
+        color: #0d6efd;
+    }
+    /* 当前查询中的账号高亮 */
+    .account-item.item-active{
+        border-color: #0d6efd;
+        color: #0d6efd;
+        background-color: #e7f1ff;
+    }
     .result-line{
         display: flex;
         align-items: flex-start;
@@ -123,5 +185,14 @@
     .result-value:hover{
         border-bottom-color: #0d6efd;
         color: #0d6efd;
+    }
+    /* 失败项（后端带 error 标记）标红，与正常结果区分 */
+    .result-value.error-value{
+        color: #dc3545;
+        border-bottom-color: #dc3545;
+    }
+    .result-value.error-value:hover{
+        color: #dc3545;
+        border-bottom-color: #dc3545;
     }
 </style>

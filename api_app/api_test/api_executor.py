@@ -26,7 +26,8 @@ def build_test_item_cases(test_item_ids, domain, env, headers):
                 'body': case['body'],
                 'expected_status_code': case['expected_status_code'],
                 'assertions': case['assertions'],
-                'description': case['description']
+                'description': case['description'],
+                'sql_database': test_item.sql_database,  # SQL 断言查询库名
             })
     return all_cases
 
@@ -74,6 +75,17 @@ def dispatch_run(data):
         if token_obj:
             headers['token'] = token_obj.token
 
+        # 按 DB_Domain.domain 查 SQL 连接配置（如 devapi1.lingshi.com，未配置 = 忽略所有 sql: 断言）
+        sql_conn = None
+        sql_env = DB_SqlEnv.objects.filter(env_name=domain_obj.domain, is_del=False).first()
+        if sql_env:
+            sql_conn = {
+                'DB_HOST': sql_env.host,
+                'DB_PORT': str(sql_env.port),
+                'DB_USER': sql_env.user,
+                'DB_PASSWORD': sql_env.password,
+            }
+
         test_run = DB_run_result.objects.create(
             env=env_name,
             status="running",
@@ -96,7 +108,7 @@ def dispatch_run(data):
         if run_mode == 'jenkins':
             zip_bytes = pack_test_bundle(test_run, cases_txt_path)
             try:
-                jenkins_url = trigger_jenkins_build(zip_bytes, test_run.id, base_url)
+                jenkins_url = trigger_jenkins_build(zip_bytes, test_run.id, base_url, sql_conn)
             except Exception as e:
                 test_run.status = 'failed'
                 test_run.finished_at = timezone.now()
@@ -106,7 +118,7 @@ def dispatch_run(data):
             test_run.save()
             results.append({"type": 1, "run_id": test_run.id, "jenkins_build_url": jenkins_url})
         else:
-            run_single_local(test_run, cases_txt_path)
+            run_single_local(test_run, cases_txt_path, sql_conn)
             results.append({"type": 1, "run_id": test_run.id})
 
     # 执行多接口脚本

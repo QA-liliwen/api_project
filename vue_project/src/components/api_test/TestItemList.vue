@@ -78,6 +78,10 @@
                             <label class="form-label-fixed">文档链接：</label>
                             <input type="text" class="form-control" v-model="edit_form.doc_link" placeholder="接口文档 URL（可留空）">
                         </div>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">SQL库名：</label>
+                            <input type="text" class="form-control" v-model="edit_form.sql_database" placeholder="SQL断言查询的库名（留空不启用）" style="width: 300px">
+                        </div>
                         <div class="form-row">
                             <label class="form-label-fixed">描 述：</label>
                             <input class="form-control" rows="2" v-model="edit_form.description"></input>
@@ -234,6 +238,7 @@
                             uploaded_filename: '',
                             script_filename: d.script_filename || '',
                             doc_link: d.doc_link || '',
+                            sql_database: d.sql_database || '',
                             uploaded_script: '',
                         };
                         this.show_modal = true;
@@ -255,6 +260,7 @@
                     uploaded_filename: '',
                     script_filename: '',
                     doc_link: '',
+                    sql_database: '',
                     uploaded_script: '',
                 };
                 this.show_modal = true;
@@ -330,6 +336,7 @@
                     type: this.edit_form.type,
                     description: this.edit_form.description,
                     doc_link: this.edit_form.doc_link,
+                    sql_database: this.edit_form.sql_database,
                     // type=1 传接口和用例，type=2 置空
                     interface_id: isScript ? null : this.edit_form.interface_id,
                     cases: isScript ? [] : cases,
