@@ -52,9 +52,9 @@
                 infos: [],
                 loading: false,
                 accountGroups: [
-                    {env: 'test', label: '测试', accounts: ['adminexam', 'adminvswrr', 'adminfmf', 'admincontent', 'adminqa9515']},
-                    {env: 'pre', label: '预发布', accounts: ['adminexam', 'adminxswrr']},
-                    {env: 'prod', label: '生产', accounts: ['adminexam', 'adminvswrr', 'adminfmf', 'adminlsllw']},
+                    {env: 'test', label: '测试', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminqa9515']},
+                    {env: 'pre', label: '预发布', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminxswrr']},
+                    {env: 'prod', label: '生产', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminlsllw']},
                 ],
             }
         },

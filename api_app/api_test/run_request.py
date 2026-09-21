@@ -198,6 +198,7 @@ def assert_sql(expr, sql_database, variables, body=None):
 
 # 执行主函数
 def run_main(case):
+    log.info(f"执行用例: {case['CaseID']} - {case['case_name']}")
     if case.get('is_active') != 'Y':
         log.debug(f"用例 {case['CaseID']} 未启用")
         pytest.skip(f"用例 {case['CaseID']} 未启用")

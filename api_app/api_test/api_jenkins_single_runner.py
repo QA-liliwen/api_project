@@ -23,16 +23,26 @@ def build_jenkins_log_config():
     return content
 
 
+# 生成 Jenkins 端使用的 conftest.py 内容（前置信息写入目录改为工作区内 logs）
+def build_jenkins_conftest():
+    with open(os.path.join(BASE_DIR, "conftest.py"), "r", encoding="utf-8") as f:
+        content = f.read()
+    content = content.replace(
+        'os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "logs")',
+        'os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")'
+    )
+    return content
+
+
 # 打包测试文件为独立 zip
-def pack_test_bundle(test_run, cases_txt_path):
+def pack_test_bundle(test_run, cases_txt_path, run_header=""):
     cases_filename = os.path.basename(cases_txt_path)
     # 读取测试txt文件
     with open(cases_txt_path, "r", encoding="utf-8") as f:
         cases_content = f.read()
 
-    # 读取 conftest 文件
-    with open(os.path.join(BASE_DIR, "conftest.py"), "r", encoding="utf-8") as f:
-        conftest_content = f.read()
+    # 读取 conftest 文件（Jenkins 版：前置信息写入工作区 logs 目录）
+    conftest_content = build_jenkins_conftest()
 
     # 读取 run_request.py 文件
     with open(os.path.join(BASE_DIR, "run_request.py"), "r", encoding="utf-8") as f:
@@ -51,6 +61,7 @@ def pack_test_bundle(test_run, cases_txt_path):
         zf.writestr("log_config.py", build_jenkins_log_config())
         zf.writestr("requirements.txt", "requests\npytest\npytest-html\npymysql\n")
         zf.writestr(cases_filename, cases_content)
+        zf.writestr("run_header.txt", run_header)  # 执行前置信息（conftest 启动时写入 log 头部）
         # 用例文件与收集规则固化到 pytest.ini，Jenkins 端统一执行 pytest .
         # run_request.py 不符合 pytest 默认的 test_*.py 命名，需显式加入 python_files
         zf.writestr(

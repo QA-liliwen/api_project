@@ -74,6 +74,22 @@
                                 <option v-for="iface in interfaces" :key="iface.id" :value="iface.id">{{ iface.name }}</option>
                             </select>
                         </div>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">角 色：</label>
+                            <div style="display: flex; align-items: center; gap: 12px">
+                                <div class="form-check" v-for="r in roles" :key="r">
+                                    <input class="form-check-input" type="radio" :id="'role_' + r" :value="r" v-model="edit_form.role">
+                                    <label class="form-check-label" :for="'role_' + r">{{ roleLabel(r) }}</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="edit_form.type === 1" class="form-row">
+                            <label class="form-label-fixed">测试端：</label>
+                            <select class="form-select" v-model="edit_form.system" style="width: 300px">
+                                <option value="oss">oss</option>
+                                <option value="app">app</option>
+                            </select>
+                        </div>
                         <div class="form-row">
                             <label class="form-label-fixed">文档链接：</label>
                             <input type="text" class="form-control" v-model="edit_form.doc_link" placeholder="接口文档 URL（可留空）">
@@ -124,12 +140,14 @@
 <script>
     import axios from 'axios'
     import bus from '../../bus'
+    import { roleLabel } from './role_labels'
     export default {
         data(){
             return{
                 groups: [],
                 checked_ids: [],
                 interfaces: [],
+                roles: [],
                 second_tags: [],
                 show_modal: false,
                 edit_form: {
@@ -140,6 +158,8 @@
                     type: 2,
                     description: '',
                     interface_id: null,
+                    role: 'exam',
+                    system: 'oss',
                     cases_json: '',
                     uploaded_filename: '',
                     script_filename: '',
@@ -150,9 +170,11 @@
         mounted:function () {
             this.get_groups()
             this.get_interfaces()
+            this.get_roles()
             this.get_second_tags()
         },
         methods:{
+            roleLabel,
             get_groups(){
                 const tag_id = this.$route.params.tag_id;
                 axios.get('http://172.16.2.60:8000/get_grouped_test_items/', {
@@ -165,6 +187,11 @@
             get_interfaces(){
                 axios.get('http://172.16.2.60:8000/get_interfaces/').then(res => {
                     this.interfaces = res.data.interfaces || [];
+                })
+            },
+            get_roles(){
+                axios.get('http://172.16.2.60:8000/get_test_accounts/').then(res => {
+                    this.roles = res.data.roles || [];
                 })
             },
             get_second_tags(){
@@ -234,6 +261,8 @@
                             type: d.type,
                             description: d.description,
                             interface_id: d.interface_id,
+                            role: d.role || 'exam',
+                            system: d.system || 'oss',
                             cases_json: JSON.stringify(d.cases, null, 2),
                             uploaded_filename: '',
                             script_filename: d.script_filename || '',
@@ -256,6 +285,8 @@
                     type: 2,
                     description: '',
                     interface_id: null,
+                    role: 'exam',
+                    system: 'oss',
                     cases_json: '',
                     uploaded_filename: '',
                     script_filename: '',
@@ -337,6 +368,8 @@
                     description: this.edit_form.description,
                     doc_link: this.edit_form.doc_link,
                     sql_database: this.edit_form.sql_database,
+                    role: isScript ? '' : this.edit_form.role,
+                    system: isScript ? '' : this.edit_form.system,
                     // type=1 传接口和用例，type=2 置空
                     interface_id: isScript ? null : this.edit_form.interface_id,
                     cases: isScript ? [] : cases,

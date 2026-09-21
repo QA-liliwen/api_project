@@ -31,6 +31,8 @@ urlpatterns = [
     path('upload_script/', upload_script),  # 上传多接口脚本.py
     path('download_script/', download_script),  # 下载脚本文件
     path('get_run_config/', get_run_config),    # 获取执行配置下拉数据
+    path('get_test_accounts/', get_test_accounts),  # 获取角色映射（环境×角色→账号）
+    path('update_test_accounts/', update_test_accounts),  # 保存角色映射（全量覆盖）
     path('execute_run/', execute_run),  # 执行测试（本地/Jenkins，由 run_mode 区分）
     path('get_test_item_detail/', get_test_item_detail),  # 获取测试项详情（编辑回填）
     path('get_interfaces/', get_interfaces),    # 获取接口列表（编辑下拉）

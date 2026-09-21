@@ -4,6 +4,35 @@ import pytest
 import requests
 
 
+# ===== 执行前置信息写入 log（测试项/角色映射/token 结果，在 pytest 输出之前） =====
+# 来源：本地 = 环境变量 RUN_HEADER；Jenkins = zip 解压出的 run_header.txt
+def _dump_run_header():
+    header = os.environ.get("RUN_HEADER")
+    if not header:
+        header_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_header.txt")
+        if os.path.exists(header_path):
+            with open(header_path, "r", encoding="utf-8") as f:
+                header = f.read()
+    if not header:
+        return
+    log_file_name = os.environ.get("LOG_FILE_NAME")
+    if not log_file_name:
+        return
+    try:
+        # 注意：conftest 被 pytest 导入早于 run_request.py 的 sys.path.insert，
+        # 此处无法 import log_config，直接拼路径（与 log_config.LOG_DIR 同逻辑）
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "logs")
+        log_path = os.path.join(log_dir, log_file_name)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(header)
+    except Exception as e:
+        print(f"[前置信息写入 log 失败] {e}")
+
+
+_dump_run_header()
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--cases-file",

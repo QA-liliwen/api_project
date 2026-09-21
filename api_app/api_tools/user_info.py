@@ -58,6 +58,21 @@ ENV_CONFIG = {
 }
 
 
+# 已知固定密码（按环境维护；未收录的账号直接走临时密码流程）
+# 登录策略：先用固定密码，失败再回落临时密码；oss 与移动端分开判断，互不影响
+FIXED_PASSWORDS = {
+    'test': {
+        'adminexam': '888888',
+        'adminqa9515': '405824',
+        'adminqwqwqw': '111111',
+        'admincontent': '111111',
+        'adminvswrr': 'Ct77a42z',
+    },
+    'pre': {},
+    'prod': {},
+}
+
+
 # 登录参数编码：L + base64(用户名:密码) + S，L/S 为固定标识符
 # 实测 'adminvswrr:bclw45' -> 'LYWRtaW52c3dycjpiY2x3NDU=S'，不是真加密，只是 Base64 混淆
 def encode_login_param(username, password):
@@ -205,31 +220,49 @@ def run(params):
     # 后续接口全部依赖它，失败时没有可展示的数据，直接抛错交视图层处理
     dim_token = get_dim_token('https://devapi1.lingshi.com/dim/vs2')
 
-    # 第一步：dim 系统拿 OSS 临时密码（oss/app 登录都依赖它）
-    # 单步失败不再整体中断：错误写入 infos 带 error 标记，已成功步骤的数据照常展示
-    password = None
-    try:
-        password = apply_dim_password(username, config['dim_base'], dim_token)
-        infos.append({"label": "OSS 临时密码", "value": password})
-    except ToolError as e:
-        infos.append({"label": "OSS 临时密码", "value": f"获取失败: {e}", "error": True})
+    # 该账号在当前环境的固定密码（未收录 = None，直接走临时密码）
+    fixed_pw = FIXED_PASSWORDS.get(env, {}).get(username)
 
-    # 第二步：oss doLogin 拿用户信息与 token（依赖临时密码，没拿到则跳过）
-    if password:
-        try:
-            user_info = oss_dologin(username, password, config['oss_base'])
-            oss_fields = ('userName', 'instId', 'instCode', 'token', 'serverId', 'userId')
-            for field in oss_fields:
-                infos.append({"label": f"OSS {field}", "value": str(user_info.get(field, ''))})
-        except ToolError as e:
-            infos.append({"label": "OSS 用户信息", "value": f"获取失败: {e}", "error": True})
+    # 临时密码懒申请：固定密码两个系统都通就完全不申请；申请失败也只做一次
+    temp_state = {'done': False, 'password': None, 'error': None}
 
-    # 第三步：app V2 登录拿 app token（key 同样是 L...S 编码，依赖临时密码）
-    if password:
+    def ensure_temp_pw():
+        if not temp_state['done']:
+            temp_state['done'] = True
+            try:
+                temp_state['password'] = apply_dim_password(username, config['dim_base'], dim_token)
+                infos.append({"label": "OSS 临时密码", "value": temp_state['password']})
+            except ToolError as e:
+                temp_state['error'] = str(e)
+        return temp_state
+
+    # 单系统登录：先用固定密码，失败回落临时密码；返回登录结果 data（失败返回 None，错误已写入 infos）
+    def system_login(login_fn, base, fail_label):
+        if fixed_pw:
+            try:
+                return login_fn(username, fixed_pw, base)
+            except ToolError:
+                pass  # 固定密码登不上，回落临时密码
+        st = ensure_temp_pw()
+        if st['error']:
+            infos.append({"label": fail_label, "value": f"获取失败: 临时密码申请失败（{st['error']}）", "error": True})
+            return None
         try:
-            app_data = app_login(username, password, config['app_server'])
-            infos.append({"label": "APP token", "value": app_data.get('token', '')})
+            return login_fn(username, st['password'], base)
         except ToolError as e:
-            infos.append({"label": "APP token", "value": f"获取失败: {e}", "error": True})
+            infos.append({"label": fail_label, "value": f"获取失败: {e}", "error": True})
+            return None
+
+    # 第一步：oss doLogin 拿用户信息与 token
+    user_info = system_login(oss_dologin, config['oss_base'], 'OSS 用户信息')
+    if user_info:
+        oss_fields = ('userName', 'instId', 'instCode', 'token', 'serverId', 'userId')
+        for field in oss_fields:
+            infos.append({"label": f"OSS {field}", "value": str(user_info.get(field, ''))})
+
+    # 第二步：app V2 登录拿 app token（key 同样是 L...S 编码，与 oss 独立判断）
+    app_data = system_login(app_login, config['app_server'], 'APP token')
+    if app_data:
+        infos.append({"label": "APP token", "value": app_data.get('token', '')})
 
     return {"infos": infos}

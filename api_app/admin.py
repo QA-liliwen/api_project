@@ -7,8 +7,8 @@ admin.site.register(DB_FirstTag)
 admin.site.register(DB_SecondTag)
 admin.site.register(DB_Domain)
 admin.site.register(DB_Env)
-admin.site.register(DB_Token)
 admin.site.register(DB_HeaderTemplate)
+admin.site.register(DB_TestAccount)
 
 @admin.register(DB_run_result)
 class DBRunResultAdmin(admin.ModelAdmin):

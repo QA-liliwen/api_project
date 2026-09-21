@@ -5,6 +5,7 @@ import openpyxl
 from django.http import JsonResponse
 from django.utils import timezone
 from api_app.models import *
+from api_app.models import TEST_ROLES
 from api_app.api_test.api_executor import dispatch_run
 
 xlsx_header_cn = ['CaseID', '用例名称', '是否执行', '请求体', '预期状态码', '断言', '描述']
@@ -43,18 +44,36 @@ def get_grouped_test_items(request):
     return JsonResponse({"groups": groups})
 
 
-# 执行配置
+# 执行配置（域名/环境下拉，含默认项标记）
 def get_run_config(request):
-    domains = list(DB_Domain.objects.filter(is_del=False).values('id', 'name'))
-    envs = list(DB_Env.objects.filter(is_del=False).values('id', 'name'))
-    tokens = list(DB_Token.objects.filter(is_del=False).values('id', 'name'))
-    header_templates = list(DB_HeaderTemplate.objects.filter(is_del=False).values('id', 'name'))
+    domains = list(DB_Domain.objects.filter(is_del=False).values('id', 'name', 'is_default'))
+    envs = list(DB_Env.objects.filter(is_del=False).values('id', 'name', 'is_default'))
     return JsonResponse({
         "domains": domains,
         "envs": envs,
-        "tokens": tokens,
-        "header_templates": header_templates,
     })
+
+
+# 角色映射（环境×角色→账号；roles 供测试项编辑与配置弹窗共用）
+def get_test_accounts(request):
+    accounts = list(DB_TestAccount.objects.filter(is_del=False).values('env_id', 'role', 'username'))
+    return JsonResponse({"roles": TEST_ROLES, "accounts": accounts})
+
+
+# 保存角色映射（全量覆盖：空用户名的格子不落库）
+def update_test_accounts(request):
+    if request.method != 'POST':
+        return JsonResponse({"code": -1, "message": "仅支持 POST 请求"}, status=405)
+    data = json.loads(request.body)
+    accounts = data.get('accounts', [])
+
+    DB_TestAccount.objects.all().delete()
+    objs = [
+        DB_TestAccount(env_id=a.get('env_id'), role=a.get('role', ''), username=a.get('username', ''))
+        for a in accounts if a.get('env_id') and a.get('role') and a.get('username')
+    ]
+    DB_TestAccount.objects.bulk_create(objs)
+    return JsonResponse({"code": 0, "message": "保存成功", "count": len(objs)})
 
 
 # 上传用例文件（存到临时目录）
@@ -165,6 +184,8 @@ def get_test_item_detail(request):
             "script_filename": item.script_filename,
             "doc_link": item.doc_link,
             "sql_database": item.sql_database,
+            "role": item.role,
+            "system": item.system,
             "sort": item.sort,
         }
     })
@@ -210,6 +231,8 @@ def update_test_item(request):
     item.description = data.get('description', item.description if not is_create else '')
     item.doc_link = data.get('doc_link', item.doc_link if not is_create else '')
     item.sql_database = data.get('sql_database', item.sql_database if not is_create else '')
+    item.role = data.get('role', item.role if not is_create else '')
+    item.system = data.get('system', item.system if not is_create else '')
 
     interface_id = data.get('interface_id')
     if interface_id is not None:

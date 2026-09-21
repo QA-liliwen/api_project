@@ -1,6 +1,10 @@
 from django.db import models
 
 
+# 测试角色清单（存储/脚本用英文；前端展示时映射回中文，固定 6 角色 × 3 环境 = 18 条）
+TEST_ROLES = ['zhihui', 'exam', 'content', 'org', 'student', 'afterschool']
+
+
 # 接口数据
 class DB_Interface(models.Model):
     name = models.CharField('接口名称', max_length=200)
@@ -33,6 +37,8 @@ class DB_TestItem(models.Model):
     script_filename = models.CharField('脚本文件名', max_length=255, blank=True, default='')
     doc_link = models.CharField('文档链接', max_length=500, blank=True, default='')
     sql_database = models.CharField('SQL库名', max_length=200, blank=True, default='')
+    role = models.CharField('测试角色', max_length=50, blank=True, default='')
+    system = models.CharField('测试端', max_length=10, blank=True, default='')
     description = models.TextField('描述', blank=True)
     is_del = models.BooleanField('是否删除', default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -110,6 +116,8 @@ class DB_SecondTag(models.Model):
 class DB_Domain(models.Model):
     name = models.CharField('域名名称', null=True, blank=True, max_length=200, unique=True)
     domain = models.CharField('域名', null=True, blank=True, max_length=200, unique=True)
+    app_server = models.CharField('App登录域名', null=True, blank=True, max_length=200)
+    is_default = models.BooleanField('默认项', default=False)
     is_del = models.BooleanField('是否删除', default=False)
 
     class Meta:
@@ -124,6 +132,7 @@ class DB_Domain(models.Model):
 class DB_Env(models.Model):
     name = models.CharField('域名名称', null=True, blank=True, max_length=50, unique=True)
     env = models.CharField('环境', null=True, blank=True, max_length=200, unique=True)
+    is_default = models.BooleanField('默认项', default=False)
     is_del = models.BooleanField('是否删除', default=False)
 
     class Meta:
@@ -134,24 +143,10 @@ class DB_Env(models.Model):
         return f"{self.name} {self.env}"
 
 
-# Token
-class DB_Token(models.Model):
-    name = models.CharField('Token名称', null=True, blank=True, max_length=100)
-    token = models.TextField('Token值', null=True, blank=True)
-    is_del = models.BooleanField('是否删除', default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = '08_Token表'
-        verbose_name_plural = '08_Token表'
-
-    def __str__(self):
-        return f"{self.name} {self.token}"
-
-
 # 请求头模板
 class DB_HeaderTemplate(models.Model):
     name = models.CharField('请求头模板名称', null=True, blank=True, max_length=100)
+    system = models.CharField('系统类型', max_length=10, blank=True, default='')
     headers = models.JSONField('请求头内容', default=dict, blank=True)
     is_del = models.BooleanField('是否删除', default=False)
 
@@ -197,3 +192,19 @@ class DB_Tool(models.Model):
 
     def __str__(self):
         return f"{self.id} {self.name} ({self.tool_key})"
+
+
+# 测试账号（按 环境+角色 维护映射；执行时按 环境+角色 解析用户名，批量获取 token）
+class DB_TestAccount(models.Model):
+    env = models.ForeignKey('DB_Env', verbose_name='测试环境', on_delete=models.SET_NULL, null=True, blank=True)
+    role = models.CharField('角色', max_length=50, default='')
+    username = models.CharField('测试用户名', max_length=100)
+    is_del = models.BooleanField('是否删除', default=False)
+
+    class Meta:
+        verbose_name = '12_测试账号表'
+        verbose_name_plural = '12_测试账号表'
+        unique_together = ('env', 'role')
+
+    def __str__(self):
+        return f"{self.env_id}_{self.role}_{self.username}"
