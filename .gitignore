@@ -9,5 +9,5 @@ api_app/data/cases/
 api_app/data/scripts/
 api_app/data/xlsx/
 api_app/data/temp/
-custom_runs/
+api_app/data/custom_runs/
 node_modules/

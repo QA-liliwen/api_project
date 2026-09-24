@@ -42,6 +42,7 @@ urlpatterns = [
     path('delete_interface/', delete_interface),  # 软删除接口
     path('get_run_result_list/', get_run_result_list),  # 测试结果列表页
     path('download_log/', download_log),  # 下载日志文件
+    path('download_jenkins_log/', download_jenkins_log),  # 下载 Jenkins 归档日志（代理）
     path('update_test_item/', update_test_item),  # 更新测试项
 
     path('get_tools/', get_tools),  # 工具箱工具列表

@@ -4,8 +4,9 @@ import pytest
 import requests
 
 
-# ===== 执行前置信息写入 log（测试项/角色映射/token 结果，在 pytest 输出之前） =====
-# 来源：本地 = 环境变量 RUN_HEADER；Jenkins = zip 解压出的 run_header.txt
+# ===== 执行前置信息写入 log（测试项/角色映射/token 结果） =====
+# 来源：本地 = 环境变量 RUN_HEADER；Jenkins = 构建命令 copy run_header.txt 直写 log 后删除源文件，
+# 此处检测不到即自动跳过（回退兼容：旧配置下仍可从 zip 解压的 run_header.txt 读取)
 def _dump_run_header():
     header = os.environ.get("RUN_HEADER")
     if not header:

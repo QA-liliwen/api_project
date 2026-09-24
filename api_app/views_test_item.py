@@ -1,18 +1,21 @@
+import io
 import json
 import os
 import shutil
 import openpyxl
+import requests
 from django.http import JsonResponse
 from django.utils import timezone
 from api_app.models import *
 from api_app.models import TEST_ROLES
 from api_app.api_test.api_executor import dispatch_run
+from api_app.api_test.api_jenkins_single_runner import JENKINS_AUTH
 
 xlsx_header_cn = ['CaseID', '用例名称', '是否执行', '请求体', '预期状态码', '断言', '描述']
 xlsx_header_en = ['CaseID', 'case_name', 'is_active', 'body', 'expected_status_code', 'assertions', 'description']
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 XLSX_DIR = os.path.join(BASE_DIR, "data", "xlsx")
-SCRIPTS_DIR = os.path.join(BASE_DIR, "data", "scripts")
+SCRIPTS_DIR = os.path.join(BASE_DIR, "data", "custom_scripts")
 TEMP_DIR = os.path.join(BASE_DIR, "data", "temp")  # 临时文件目录，保存时移走
 
 
@@ -182,6 +185,7 @@ def get_test_item_detail(request):
             "cases": item.cases,
             "script_content": item.script_content,
             "script_filename": item.script_filename,
+            "script_inputs": item.script_inputs,
             "doc_link": item.doc_link,
             "sql_database": item.sql_database,
             "role": item.role,
@@ -231,6 +235,7 @@ def update_test_item(request):
     item.description = data.get('description', item.description if not is_create else '')
     item.doc_link = data.get('doc_link', item.doc_link if not is_create else '')
     item.sql_database = data.get('sql_database', item.sql_database if not is_create else '')
+    item.script_inputs = data.get('script_inputs', item.script_inputs if not is_create else '')
     item.role = data.get('role', item.role if not is_create else '')
     item.system = data.get('system', item.system if not is_create else '')
 
@@ -454,3 +459,16 @@ def download_log(request):
     if not os.path.exists(file_path):
         raise Http404("日志文件不存在")
     return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
+
+
+# 下载 Jenkins 归档日志（平台代理拉流，浏览器直接下载；规避 Jenkins 登录页与 text/plain 内联显示）
+def download_jenkins_log(request):
+    run_id = request.GET.get('run_id', '')
+    run_result = DB_run_result.objects.filter(id=run_id).first()
+    if not run_result or not run_result.jenkins_build_url or not run_result.log_file:
+        raise Http404("日志记录不存在")
+    log_url = run_result.jenkins_build_url + 'artifact/logs/' + run_result.log_file
+    resp = requests.get(log_url, auth=JENKINS_AUTH, verify=False, timeout=30)
+    if resp.status_code != 200:
+        return JsonResponse({"msg": f"Jenkins 日志获取失败: HTTP {resp.status_code}"}, status=502)
+    return FileResponse(io.BytesIO(resp.content), as_attachment=True, filename=run_result.log_file)

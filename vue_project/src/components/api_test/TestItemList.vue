@@ -119,6 +119,10 @@
                                 <a class="btn btn-outline-primary btn-sm" :href="'http://172.16.2.60:8000/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
                             </div>
                         </div>
+                        <div v-if="edit_form.type === 2" class="form-row">
+                            <label class="form-label-fixed">多接口入参：</label>
+                            <textarea class="form-control" rows="3" v-model="edit_form.script_inputs" placeholder='JSON 字典（键名对应脚本中的占位符），如 {"examName": "测试A"}' style="width: 744px;"></textarea>
+                        </div>
                         <div v-if="edit_form.type === 1" class="form-row">
                             <label class="form-label-fixed">上传用例：</label>
                             <div style="flex: 1; display: flex; gap: 8px; align-items: center">
@@ -163,6 +167,7 @@
                     cases_json: '',
                     uploaded_filename: '',
                     script_filename: '',
+                    script_inputs: '',
                     uploaded_script: '',
                 },
             }
@@ -266,6 +271,7 @@
                             cases_json: JSON.stringify(d.cases, null, 2),
                             uploaded_filename: '',
                             script_filename: d.script_filename || '',
+                            script_inputs: d.script_inputs || '',
                             doc_link: d.doc_link || '',
                             sql_database: d.sql_database || '',
                             uploaded_script: '',
@@ -290,6 +296,7 @@
                     cases_json: '',
                     uploaded_filename: '',
                     script_filename: '',
+                    script_inputs: '',
                     doc_link: '',
                     sql_database: '',
                     uploaded_script: '',
@@ -360,6 +367,14 @@
                     }
                 }
                 const isScript = this.edit_form.type === 2;
+                if (isScript && (this.edit_form.script_inputs || '').trim()) {
+                    try {
+                        JSON.parse(this.edit_form.script_inputs);
+                    } catch (e) {
+                        alert('多接口入参 JSON 格式错误');
+                        return;
+                    }
+                }
                 const payload = {
                     id: this.edit_form.is_create ? null : this.edit_form.id,
                     second_tag_id: this.edit_form.second_tag_id,
@@ -376,6 +391,7 @@
                     // type=1 传 xlsx，type=2 传脚本
                     uploaded_filename: isScript ? '' : this.edit_form.uploaded_filename,
                     uploaded_script: isScript ? this.edit_form.uploaded_script : '',
+                    script_inputs: isScript ? (this.edit_form.script_inputs || '') : '',
                 };
                 axios.post('http://172.16.2.60:8000/update_test_item/', payload).then(res => {
                     if (res.data.code === 0) {

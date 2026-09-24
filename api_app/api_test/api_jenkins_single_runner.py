@@ -8,6 +8,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JENKINS_BASE = "https://172.16.1.240:8443"
 JENKINS_JOB = "Exam_APITest_Platform_Job"
+JENKINS_AUTH = ('qaadmin', 'qatest2027')
 
 
 # 生成 Jenkins 端使用的 log_config.py 内容（日志目录改为工作区内 logs）
@@ -79,7 +80,7 @@ def trigger_jenkins_build(zip_bytes, run_id, base_url, sql_conn=None):
 
     # 用 Session 保持会话一致性（Cookie + crumb）
     session = requests.Session()
-    session.auth = ('qaadmin', 'qatest2027')
+    session.auth = JENKINS_AUTH
     session.verify = False
 
     # 获取 CSRF crumb

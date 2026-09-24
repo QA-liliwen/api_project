@@ -36,7 +36,14 @@ C:\Python\Python312\python.exe -c "import time;open('started_at.txt','w').write(
 set /p STARTED_AT=<started_at.txt
 set TEST_RUN_ID=%RUN_ID%
 set LOG_FILE_NAME=%RUN_ID%_app.log
-C:\Python\Python312\python.exe -m pytest . -v --html=report_%RUN_ID%.html --self-contained-html
+set PYTHONIOENCODING=utf-8
+if not exist logs mkdir logs
+copy /y run_header.txt logs\%RUN_ID%_app.log >nul
+del /q run_header.txt
+C:\Python\Python312\python.exe -m pytest . -v --tb=no --html=report_%RUN_ID%.html --self-contained-html >> logs\%RUN_ID%_pytest.log 2>&1
+type logs\%RUN_ID%_pytest.log >> logs\%RUN_ID%_app.log
+del /q logs\%RUN_ID%_pytest.log
+type logs\%RUN_ID%_app.log
 exit /b 0
 ```
 
@@ -49,6 +56,13 @@ exit /b 0
 - `pip install -r requirements.txt`：依赖每次安装，zip 包内已含该文件
 - 时间戳两行：batch 处理时间格式有坑，用 Python 生成时间戳写入文件，再用 `set /p` 读回环境变量
 - `set TEST_RUN_ID` / `set LOG_FILE_NAME`：conftest.py 与日志组件按这两个环境变量识别本次运行，日志文件名为 `{RUN_ID}_app.log`
+- `set PYTHONIOENCODING=utf-8`：pytest 输出重定向到文件时 Python 默认按系统编码（GBK）写入，中文断言详情会乱码；强制 UTF-8，与 conftest 写入的前置信息编码一致
+- `if not exist logs mkdir logs`：`>>` 重定向和 `copy` 在命令启动时就要打开目标文件，logs 目录不存在则 pytest 一行都不会执行
+- `copy /y run_header.txt logs\%RUN_ID%_app.log` + `del /q run_header.txt`：前置信息由 batch 先拷贝成 log 文件（纯字节复制，顺序 100% 保证）。不能依赖 conftest 写头部：实测 pytest banner 输出早于 conftest 导入（收集阶段），conftest 写的头部会排在 banner 之后；删掉源文件后 conftest 检测不到（无 RUN_HEADER 环境变量、无 run_header.txt）自动跳过，不会重复写
+- `>> logs\%RUN_ID%_pytest.log 2>&1` + `type ... >> ...` 合并 + `del`：pytest 输出**必须先写临时文件再合并**，不能直接 `>>` 进 app.log——单接口链路的业务日志由 pytest 进程内 logging 模块（log_config.py）打开 app.log 写入，而 cmd `>>` 重定向已持有 app.log 的打开句柄且不允许第二个写入者打开同一文件，logging 初始化直接 PermissionError，用例全部收集失败（实测复现）。单接口与多接口共用本 Job，命令必须统一，故 pytest 输出一律走临时文件，跑完后（logging 句柄已随进程退出关闭）再 `type` 合并进 app.log。多接口脚本不打业务日志，不受影响，效果等价
+- 最终 log 结构：前置信息 → 业务日志（单接口实时写入）→ pytest 输出（banner、用例 PASSED/FAILED 进度行、回调/报告行、short test summary 摘要、汇总行）
+- `--tb=no`：不输出失败用例的完整报告段（`==== FAILURES ====` 大段：参数化 case 回显、traceback、局部变量、断言详情、Captured stderr/log 双回显），失败信息只在 short test summary 里留一行 `FAILED ... - AssertionError: ...` 摘要。无信息损失：完整 traceback 与失败时的日志上下文仍保留在 HTML 报告里（深度排查看报告，log 只看结果概览）
+- `type logs\%RUN_ID%_app.log`：把完整日志回显到 Jenkins 构建日志，保留构建页直接阅读输出的能力
 - `pytest .`：用例文件与收集规则固化在 zip 包内的 pytest.ini 中（`addopts` 指定用例文件，`python_files` 声明 `run_request.py`），Jenkins 端命令保持统一
 - `--html` + `--self-contained-html`：生成单文件 HTML 报告，方便归档与在线查看
 - `exit /b 0`：pytest 存在失败用例时退出码非 0，此行强制构建状态为成功；测试结果以平台回调数据为准，不看 Jenkins 构建红绿灯
@@ -63,12 +77,10 @@ Files to archive 填：
 report_*.html,logs/*.log
 ```
 
-归档 HTML 测试报告与执行日志。平台前端按下述规则拼接下载链接，点击直接跳转 Jenkins 归档地址：
+归档 HTML 测试报告与执行日志。平台前端两种访问方式：
 
-```
-报告：{BUILD_URL}artifact/report_{RUN_ID}.html
-日志：{BUILD_URL}artifact/logs/{RUN_ID}_app.log
-```
+- 报告：直接跳转 Jenkins 归档地址 `{BUILD_URL}artifact/report_{RUN_ID}.html`（HTML 报告适合在线查看）
+- 日志：经平台接口 `/download_jenkins_log/?run_id={RUN_ID}` 代理拉流下载（Jenkins 对 .log 返回 text/plain 会内联显示、未登录会跳登录页；由 Django 后端带 Jenkins 凭据取回文件流并以附件返回）
 
 BUILD_URL 是 Jenkins 构建时自动注入的环境变量，conftest.py 回调平台时一并回填到运行结果表，前端直接使用。
 

@@ -9,23 +9,33 @@ from api_app.api_test.api_jenkins_custom_runner import *
 from api_app.api_test.token_fetcher import fetch_tokens
 
 
-# 合并多个测试项的用例数据（请求头按测试项各自配置的角色/系统组装）
-def build_test_item_cases(test_item_ids, domain, env, token_map, template_map, role_user_map):
+# 执行准备：一次性组装全量请求头（环境已配置账号的角色 × oss/app）
+# 键 = user_{角色}_{端} 
+# 值 = 系统对应模板 + 该角色账号对应端的 token + serverId 修正
+def build_headers_map(role_user_map, token_map, template_map):
+    headers_map = {}
+    for role, username in role_user_map.items():
+        for system in ('oss', 'app'):
+            headers = (template_map.get(system) or {}).copy()
+            token = token_map.get(username, {}).get(system, '')
+            headers['token'] = token
+            # 从 token 末段提取动态 serverId
+            server_id = token.split(':')[-1].rstrip('v') if token else ''
+            for key in [k for k in headers if k.lower() == 'serverid']:
+                headers[key] = server_id
+            headers_map[f"user_{role}_{system}"] = headers
+    return headers_map
+
+
+# 合并多个测试项的用例数据（请求头从全量预组装表中查表获取，不依赖逐项现拼）
+def build_test_item_cases(test_item_ids, domain, env, headers_map):
     all_cases = []
     for item_id in test_item_ids:
         test_item = DB_TestItem.objects.get(id=item_id)
         interface = test_item.interface
         base_url = "https://" + interface.url.format(domain, env)
-        # 该测试项的请求头 = 系统对应模板 + 角色解析出的用户名（当前环境）对应系统的 token
-        username = role_user_map.get(test_item.role)
-        headers = (template_map.get(test_item.system) or {}).copy()
-        token = token_map.get(username, {}).get(test_item.system, '')
-        headers['token'] = token
-        # serverId 动态：从 token 末段提取（如 'xxx:1201v' -> '1201'，长度不固定，可能1001/1201/10/1）
-        # 同步替换模板里的 serverid/serverId 字段（oss 模板小写、app 模板大写，大小写跟随模板）；token 为空则置空
-        server_id = token.split(':')[-1].rstrip('v') if token else ''
-        for key in [k for k in headers if k.lower() == 'serverid']:
-            headers[key] = server_id
+        # 该测试项的请求头：直接取角色×端对应整头（查不到降级空头）
+        headers = headers_map.get(f"user_{test_item.role}_{test_item.system}") or {}
         for case in test_item.cases:
             all_cases.append({
                 'url': base_url,
@@ -70,26 +80,48 @@ def dispatch_run(data):
     env_obj = DB_Env.objects.filter(id=env_id, is_del=False).first()
     env_name = env_obj.name if env_obj else ''
 
-    # ===== 执行准备：批量获取 token =====
-    # 统一取当前环境全部角色的账号映射（环境维度全量，与测试项配置无关）
+    # 执行准备：批量获取 token，统一取当前环境全部角色的账号映射
     role_user_map = {a.role: a.username for a in DB_TestAccount.objects.filter(env_id=env_id, is_del=False)}
-    token_map, template_map = {}, {}
+    token_map, template_map, headers_map = {}, {}, {}
 
-    # 获取域名（取 token / 拼接用例 URL 均依赖）
+    # 获取域名
     domain_id = data.get('domain_id')
     domain_obj = DB_Domain.objects.filter(id=domain_id, is_del=False).first()
 
     if role_user_map:
-        # 当前环境全部角色的用户名（去重）
+        # 当前环境全部角色的用户名
         usernames = sorted(set(role_user_map.values()))
 
-        # 请求头模板：system -> headers
+        # 请求头模板
         template_map = {tpl.system: tpl.headers for tpl in DB_HeaderTemplate.objects.filter(is_del=False) if tpl.system}
 
-        # 批量获取所有账号的 token（一轮执行内复用；失败降级空串不拦截）
+        # 批量获取所有账号的 token
         token_map = fetch_tokens(domain_obj.domain, env_obj.env, domain_obj.app_server, usernames)
 
-    # 先执行单接口用例
+        # 一次性组装全量请求头
+        headers_map = build_headers_map(role_user_map, token_map, template_map)
+
+    # 测试信息日志片段
+    header_lines = [
+        "\n==================== 执行前置信息 ====================\n",
+        f"执行时间: {timezone.localtime().strftime('%Y-%m-%d %H:%M:%S')}\n",
+        f"环境: {env_name} (env_id={env_id}) | 域名: {domain_obj.domain} | App登录域名: {domain_obj.app_server}\n",
+        f"测试项({len(test_items)}):\n",
+    ]
+    for it in test_items:
+        header_lines.append(f"  [{it.id}] {it.name} | 角色: {it.role or '-'} | 测试端: {it.system or '-'}\n")
+    user_info_lines = [f"角色映射(环境 {env_name}，共{len(role_user_map)}条):\n"]
+    for role, user in role_user_map.items():
+        user_info_lines.append(f"  {role} -> {user}\n")
+    user_info_lines.append("token 获取结果:\n")
+    for user, tokens in token_map.items():
+        user_info_lines.append(f"  {user}: oss={tokens.get('oss') or '(失败/空)'} | app={tokens.get('app') or '(失败/空)'}\n")
+    header_lines.extend(user_info_lines)
+    header_lines.append("======================================================\n\n")
+    # 执行前置信息文案（写入本次执行 log 开头，在 pytest 输出之前，单/多接口共用）
+    run_header_text = "".join(header_lines)
+
+    # 执行单接口用例
     if type1_ids:
         # 按 DB_Domain.domain 查 SQL 连接配置（如 devapi1.lingshi.com，未配置 = 忽略所有 sql: 断言）
         sql_conn = None
@@ -111,27 +143,10 @@ def dispatch_run(data):
             trigger_source=run_mode,
         )
 
-        all_cases = build_test_item_cases(type1_ids, domain_obj.domain, env_obj.env, token_map, template_map, role_user_map)
+        all_cases = build_test_item_cases(type1_ids, domain_obj.domain, env_obj.env, headers_map)
         test_run.total = len(all_cases)
 
-        # 执行前置信息（写入本次执行 log 开头，在 pytest 输出之前）
-        header_lines = [
-            "\n==================== 执行前置信息 ====================\n",
-            f"执行时间: {timezone.localtime().strftime('%Y-%m-%d %H:%M:%S')}\n",
-            f"环境: {env_name} (env_id={env_id}) | 域名: {domain_obj.domain} | App登录域名: {domain_obj.app_server}\n",
-            f"测试项({len(type1_items)}):\n",
-        ]
-        for it in type1_items:
-            header_lines.append(f"  [{it.id}] {it.name} | 角色: {it.role or '-'} | 测试端: {it.system or '-'}\n")
-        header_lines.append(f"角色映射(环境 {env_name}，共{len(role_user_map)}条):\n")
-        for role, user in role_user_map.items():
-            header_lines.append(f"  {role} -> {user}\n")
-        header_lines.append("token 获取结果:\n")
-        for user, tokens in token_map.items():
-            header_lines.append(f"  {user}: oss={tokens.get('oss') or '(失败/空)'} | app={tokens.get('app') or '(失败/空)'}\n")
-        header_lines.append("======================================================\n\n")
-        run_header_text = "".join(header_lines)
-        cases_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "cases")
+        cases_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "single_cases")
         cases_txt_name = f"{test_run.id}_cases.txt"
         cases_txt_path = os.path.join(cases_dir, cases_txt_name)
         with open(cases_txt_path, "w", encoding="utf-8") as f:
@@ -149,6 +164,7 @@ def dispatch_run(data):
                 test_run.save()
                 return {"code": -1, "message": str(e)}, 500
             test_run.jenkins_build_url = jenkins_url
+            test_run.log_file = f"{test_run.id}_app.log"  # 日志文件名（与 Jenkins batch 的 LOG_FILE_NAME 一致），供前端拼日志链接
             test_run.save()
             results.append({"type": 1, "run_id": test_run.id, "jenkins_build_url": jenkins_url})
         else:
@@ -157,15 +173,34 @@ def dispatch_run(data):
 
     # 执行多接口脚本
     if type2_ids:
+        # 组装脚本变量池种子：domain/env + 全量头（user_{角色}_{端}）+ 各脚本入参
+        # 入参平铺在最后合并 → 同名键以入参为准（最高优先级）
+        common_vars = {'domain': domain_obj.domain, 'env': env_obj.env, **headers_map}
+        script_vars = {}
+        for item in test_items:
+            if item.type != 2:
+                continue
+            try:
+                inputs = json.loads(item.script_inputs) if item.script_inputs else {}
+            except json.JSONDecodeError:
+                inputs = {}
+            if not isinstance(inputs, dict):
+                inputs = {}
+            script_vars[f"test_flow_{item.id}.py"] = {**common_vars, **inputs}
         if run_mode == 'jenkins':
-            resp, status = run_custom_jenkins(type2_ids, description, base_url, env=env_name)
+            resp, status = run_custom_jenkins(type2_ids, description, base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
         else:
-            resp, status = run_custom(type2_ids, description, base_url, env=env_name)
+            resp, status = run_custom(type2_ids, description, base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
         if status != 200:
             return resp, status
+        # 变量字典存档到固定目录（重要比对数据，与 single_cases 下的用例文件对应）
+        run_id = resp.get("run_id")
+        var_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "custom_var")
+        with open(os.path.join(var_dir, f"{run_id}_var.json"), "w", encoding="utf-8") as f:
+            json.dump(script_vars, f, ensure_ascii=False, indent=2)
         results.append({
             "type": 2,
-            "run_id": resp.get("run_id"),
+            "run_id": run_id,
             "jenkins_build_url": resp.get("jenkins_build_url", ""),
         })
 

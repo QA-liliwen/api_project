@@ -35,6 +35,7 @@ class DB_TestItem(models.Model):
     cases = models.JSONField("用例数据", default=list, blank=True)
     script_content = models.TextField('脚本内容', blank=True, default='')
     script_filename = models.CharField('脚本文件名', max_length=255, blank=True, default='')
+    script_inputs = models.TextField('多接口入参', blank=True, default='')
     doc_link = models.CharField('文档链接', max_length=500, blank=True, default='')
     sql_database = models.CharField('SQL库名', max_length=200, blank=True, default='')
     role = models.CharField('测试角色', max_length=50, blank=True, default='')
