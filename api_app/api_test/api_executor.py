@@ -173,10 +173,10 @@ def dispatch_run(data):
 
     # 执行多接口脚本
     if type2_ids:
-        # 组装脚本变量池种子：domain/env + 全量头（user_{角色}_{端}）+ 各脚本入参
-        # 入参平铺在最后合并 → 同名键以入参为准（最高优先级）
-        common_vars = {'domain': domain_obj.domain, 'env': env_obj.env, **headers_map}
-        script_vars = {}
+        # 组装脚本变量池种子（两级结构）：__common__ 公共层（domain/env + 全量头 user_{角色}_{端}）全执行只存一份，
+        # 各脚本键下只放该项自己的入参；脚本读取时 {**common, **own} 合并 → 入参仍为最高优先级
+        common_vars = {'domain': domain_obj.domain, 'env': domain_obj.env, **headers_map}
+        script_vars = {'__common__': common_vars}
         for item in test_items:
             if item.type != 2:
                 continue
@@ -186,7 +186,7 @@ def dispatch_run(data):
                 inputs = {}
             if not isinstance(inputs, dict):
                 inputs = {}
-            script_vars[f"test_flow_{item.id}.py"] = {**common_vars, **inputs}
+            script_vars[f"test_flow_{item.id}.py"] = inputs
         if run_mode == 'jenkins':
             resp, status = run_custom_jenkins(type2_ids, description, base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
         else:
