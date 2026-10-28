@@ -30,6 +30,7 @@ urlpatterns = [
     path('upload_case/', upload_case),  # 上传用例xlsx
     path('upload_script/', upload_script),  # 上传多接口脚本.py
     path('download_script/', download_script),  # 下载脚本文件
+    path('download_resource/', download_resource),  # 下载固定资源（制作教程/用例模板）
     path('get_run_config/', get_run_config),    # 获取执行配置下拉数据
     path('get_test_accounts/', get_test_accounts),  # 获取角色映射（环境×角色→账号）
     path('update_test_accounts/', update_test_accounts),  # 保存角色映射（全量覆盖）

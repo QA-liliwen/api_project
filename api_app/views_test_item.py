@@ -123,6 +123,19 @@ def download_script(request):
     return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
 
 
+# 下载固定资源（制作教程/用例模板，左侧菜单按钮用；固定映射不做路径拼接，无任意文件读取风险）
+RESOURCE_FILES = {
+    'guide': os.path.join(BASE_DIR, 'data', '单接口用例制作教程.md'),
+    'template': os.path.join(XLSX_DIR, '自动化测试用例模板.xlsx'),
+}
+
+def download_resource(request):
+    file_path = RESOURCE_FILES.get(request.GET.get('type', ''))
+    if not file_path or not os.path.exists(file_path):
+        raise Http404("资源文件不存在")
+    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=os.path.basename(file_path))
+
+
 # 读取用例文件
 def read_single_case(file_path: str):
     wb = openpyxl.load_workbook(file_path, read_only=True)
@@ -418,12 +431,12 @@ def delete_interface(request):
 
 # 测试结果列表
 def get_run_result_list(request):
-    jenkins_results = list(DB_run_result.objects.filter(trigger_source='jenkins').order_by('-id')[:20].values(
+    jenkins_results = list(DB_run_result.objects.filter(trigger_source='jenkins').order_by('-id')[:10].values(
         'id', 'description', 'status', 'total', 'passed', 'failed', 'skipped',
         'started_at', 'finished_at', 'duration_seconds',
         'trigger_source', 'env', 'jenkins_build_url', 'log_file', 'report_file', 'test_items'
     ))
-    local_results = list(DB_run_result.objects.exclude(trigger_source='jenkins').order_by('-id')[:20].values(
+    local_results = list(DB_run_result.objects.exclude(trigger_source='jenkins').order_by('-id')[:10].values(
         'id', 'description', 'status', 'total', 'passed', 'failed', 'skipped',
         'started_at', 'finished_at', 'duration_seconds',
         'trigger_source', 'env', 'jenkins_build_url', 'log_file', 'report_file', 'test_items'
@@ -431,6 +444,10 @@ def get_run_result_list(request):
 
     def _enrich(results):
         for r in results:
+            # USE_TZ=True 读出的时间为 UTC aware，输出转东八区本地字符串，与日志文件时间保持一致
+            for k in ('started_at', 'finished_at'):
+                dt = r.get(k)
+                r[k] = timezone.localtime(dt).strftime('%Y-%m-%d %H:%M:%S') if dt else ''
             r['test_type'] = None
             r['test_item_names'] = []
             ids = [i.strip() for i in str(r['test_items']).split(',') if i.strip()]
