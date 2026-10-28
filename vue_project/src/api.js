@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// 后端服务地址，换部署环境只改这一处
-export const BASE_URL = 'http://172.16.2.60:8000'
+// 留空表示同源相对路径，部署到任意IP/域名都无需修改
+export const BASE_URL = ''
 
 const api = axios.create({
     baseURL: BASE_URL,

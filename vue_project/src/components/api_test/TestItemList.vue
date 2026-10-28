@@ -116,7 +116,7 @@
                             <label class="form-label-fixed"></label>
                             <div style="flex: 1; display: flex; align-items: center; gap: 8px">
                                 <span style="font-size: 13px; color: #666">已上传: {{ edit_form.script_filename }}</span>
-                                <a class="btn btn-outline-primary btn-sm" :href="'http://172.16.2.60:8000/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
+                                <a class="btn btn-outline-primary btn-sm" :href="'/download_script/?filename=' + encodeURIComponent(edit_form.script_filename)" target="_blank">下载</a>
                             </div>
                         </div>
                         <div v-if="edit_form.type === 2" class="form-row">
@@ -182,7 +182,7 @@
             roleLabel,
             get_groups(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://172.16.2.60:8000/get_grouped_test_items/', {
+                axios.get('/get_grouped_test_items/', {
                     params: {first_tag_id: tag_id}
                 }).then(res=>{
                     this.groups = res.data.groups.map(g => ({...g, collapsed: false}));
@@ -190,18 +190,18 @@
                 })
             },
             get_interfaces(){
-                axios.get('http://172.16.2.60:8000/get_interfaces/').then(res => {
+                axios.get('/get_interfaces/').then(res => {
                     this.interfaces = res.data.interfaces || [];
                 })
             },
             get_roles(){
-                axios.get('http://172.16.2.60:8000/get_test_accounts/').then(res => {
+                axios.get('/get_test_accounts/').then(res => {
                     this.roles = res.data.roles || [];
                 })
             },
             get_second_tags(){
                 const tag_id = this.$route.params.tag_id;
-                axios.get('http://172.16.2.60:8000/get_second_tags/', {
+                axios.get('/get_second_tags/', {
                     params: {first_tag_id: tag_id}
                 }).then(res => {
                     this.second_tags = res.data.second_tags || [];
@@ -253,7 +253,7 @@
                 return names
             },
             open_edit(item){
-                axios.get('http://172.16.2.60:8000/get_test_item_detail/', {
+                axios.get('/get_test_item_detail/', {
                     params: {id: item.id}
                 }).then(res => {
                     if (res.data.code === 0) {
@@ -310,7 +310,7 @@
                 }
                 const formData = new FormData();
                 formData.append('fileUpload', fileInput.files[0]);
-                axios.post('http://172.16.2.60:8000/upload_case/', formData, {
+                axios.post('/upload_case/', formData, {
                     headers: {'Content-Type': 'multipart/form-data'}
                 }).then(res => {
                     if (res.data.cases) {
@@ -330,7 +330,7 @@
                 }
                 const formData = new FormData();
                 formData.append('fileUpload', scriptInput.files[0]);
-                axios.post('http://172.16.2.60:8000/upload_script/', formData, {
+                axios.post('/upload_script/', formData, {
                     headers: {'Content-Type': 'multipart/form-data'}
                 }).then(res => {
                     if (res.data.filename) {
@@ -393,7 +393,7 @@
                     uploaded_script: isScript ? this.edit_form.uploaded_script : '',
                     script_inputs: isScript ? (this.edit_form.script_inputs || '') : '',
                 };
-                axios.post('http://172.16.2.60:8000/update_test_item/', payload).then(res => {
+                axios.post('/update_test_item/', payload).then(res => {
                     if (res.data.code === 0) {
                         this.show_modal = false;
                         this.get_groups();
@@ -406,7 +406,7 @@
             },
             soft_delete(){
                 if (!confirm('确定要删除这个测试项吗？')) return;
-                axios.post('http://172.16.2.60:8000/update_test_item/', {
+                axios.post('/update_test_item/', {
                     id: this.edit_form.id,
                     is_del: true
                 }).then(res => {

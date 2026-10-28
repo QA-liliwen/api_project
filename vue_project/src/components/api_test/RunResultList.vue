@@ -43,7 +43,7 @@
                         <td>{{ format_time(item.started_at) }}</td>
                         <td>{{ format_time(item.finished_at) }}</td>
                         <td>
-                            <a v-if="item.log_file && item.jenkins_build_url" :href="'http://172.16.2.60:8000/download_jenkins_log/?run_id=' + item.id" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
+                            <a v-if="item.log_file && item.jenkins_build_url" :href="'/download_jenkins_log/?run_id=' + item.id" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
                             <span v-else style="color: gray">-</span>
                         </td>
                         <td>
@@ -101,7 +101,7 @@
                         <td>{{ format_time(item.started_at) }}</td>
                         <td>{{ format_time(item.finished_at) }}</td>
                         <td>
-                            <a v-if="item.log_file" :href="'http://172.16.2.60:8000/download_log/?filename=' + item.log_file" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
+                            <a v-if="item.log_file" :href="'/download_log/?filename=' + item.log_file" class="btn btn-outline-primary btn-sm" style="font-size: 12px">下载</a>
                             <span v-else style="color: gray">-</span>
                         </td>
                         <td>
@@ -154,7 +154,7 @@
         },
         methods: {
             get_list() {
-                axios.get('http://172.16.2.60:8000/get_run_result_list/').then(res => {
+                axios.get('/get_run_result_list/').then(res => {
                     this.jenkins_results = res.data.jenkins || []
                     this.local_results = res.data.local || []
                 })

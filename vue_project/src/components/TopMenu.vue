@@ -25,7 +25,7 @@
             <a class="nav-link" href="https://172.16.1.240:8443/job/Exam_APITest_Platform_Job/" target="_blank">Jenkins</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="http://172.16.2.60:8000/admin/" target="_blank">后台</a>
+            <a class="nav-link" href="/admin/" target="_blank">后台</a>
           </li>
         </ul>
       </div>
@@ -44,7 +44,7 @@
         },
         mounted:function () {
             this.active_tag_id = this.$route.params.tag_id;
-            axios.get('http://172.16.2.60:8000/get_top_menu/').then(res=>{
+            axios.get('/get_top_menu/').then(res=>{
                 this.first_tags = res.data.first_tags;
             })
         },

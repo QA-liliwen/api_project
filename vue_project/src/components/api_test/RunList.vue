@@ -125,7 +125,7 @@
         methods:{
             roleLabel,
             get_config(){
-                axios.get('http://172.16.2.60:8000/get_run_config/').then(res=>{
+                axios.get('/get_run_config/').then(res=>{
                     this.domains = res.data.domains;
                     this.envs = res.data.envs;
                     // 自动选中后台标记为默认的域名/环境
@@ -136,7 +136,7 @@
                 })
             },
             open_role_dialog(){
-                axios.get('http://172.16.2.60:8000/get_test_accounts/').then(res => {
+                axios.get('/get_test_accounts/').then(res => {
                     this.roles = res.data.roles || [];
                     // 先按 环境×角色 初始化空格子（保证 Vue2 响应式），再回填已保存账号
                     const matrix = {};
@@ -160,7 +160,7 @@
                         accounts.push({env_id: e.id, role: r, username: (this.account_matrix[e.id] || {})[r] || ''});
                     });
                 });
-                axios.post('http://172.16.2.60:8000/update_test_accounts/', {accounts}).then(res => {
+                axios.post('/update_test_accounts/', {accounts}).then(res => {
                     if (res.data.code === 0) {
                         alert('保存成功，共 ' + res.data.count + ' 条映射');
                         this.show_role_dialog = false;
@@ -186,7 +186,7 @@
                     run_mode: this.run_mode,
                 };
 
-                axios.post('http://172.16.2.60:8000/execute_run/', payload).then(res=>{
+                axios.post('/execute_run/', payload).then(res=>{
                     this.show_dialog = false;
                     this.run_description = '';
                     const results = res.data.results || [];
