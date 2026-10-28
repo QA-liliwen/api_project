@@ -83,6 +83,7 @@ def dispatch_run(data):
     # 执行准备：批量获取 token，统一取当前环境全部角色的账号映射
     role_user_map = {a.role: a.username for a in DB_TestAccount.objects.filter(env_id=env_id, is_del=False)}
     token_map, template_map, headers_map = {}, {}, {}
+    trustee_notes = {}  # 托管账号的 token 获取说明（提取成功/跳过原因），写入执行日志
 
     # 获取域名
     domain_id = data.get('domain_id')
@@ -95,8 +96,13 @@ def dispatch_run(data):
         # 请求头模板
         template_map = {tpl.system: tpl.headers for tpl in DB_HeaderTemplate.objects.filter(is_del=False) if tpl.system}
 
+        # 托管角色（afterschool）的 app token 走托管身份 token（登录沾光/switch 切换，见 token_fetcher.login_trustee），
+        # 提取失败一律跳过（token 落空串），结果说明回填 trustee_notes 供日志统一注释
+        trustee_usernames = {u for r, u in role_user_map.items() if r == 'afterschool'}
+
         # 批量获取所有账号的 token
-        token_map = fetch_tokens(domain_obj.domain, env_obj.env, domain_obj.app_server, usernames)
+        token_map = fetch_tokens(domain_obj.domain, env_obj.env, domain_obj.app_server, usernames,
+                                 trustee_usernames=trustee_usernames, trustee_notes=trustee_notes)
 
         # 一次性组装全量请求头
         headers_map = build_headers_map(role_user_map, token_map, template_map)
@@ -116,6 +122,11 @@ def dispatch_run(data):
     user_info_lines.append("token 获取结果:\n")
     for user, tokens in token_map.items():
         user_info_lines.append(f"  {user}: oss={tokens.get('oss') or '(失败/空)'} | app={tokens.get('app') or '(失败/空)'}\n")
+    # 托管 token 状态统一注释：未填角色 username / 提取成功 / 获取失败（跳过，token 已落空串）
+    if 'afterschool' in role_user_map:
+        user_info_lines.append(f"  托管 token: {trustee_notes.get(role_user_map['afterschool']) or '跳过（获取失败）'}\n")
+    else:
+        user_info_lines.append("  托管 token: 跳过（未填角色 username）\n")
     header_lines.extend(user_info_lines)
     header_lines.append("======================================================\n\n")
     # 执行前置信息文案（写入本次执行 log 开头，在 pytest 输出之前，单/多接口共用）
