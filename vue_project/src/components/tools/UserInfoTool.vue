@@ -20,7 +20,7 @@
             <label>用户名</label>
             <input class="form-control form-control-sm" style="width: 320px" v-model="username"
                    placeholder="输入用户名，一次拿全多系统信息" @keyup.enter="run">
-            <button class="btn btn-primary btn-sm" style="margin-left: 15px" :disabled="loading" @click="run">
+            <button class="btn btn-primary btn-sm" style="margin-left: 15px" :disabled="loading || trusteeLoading" @click="run">
                 {{ loading ? '查询中...' : '查询' }}
             </button>
         </div>
@@ -33,10 +33,19 @@
         </div>
 
         <div class="result-box" v-if="infos.length">
-            <div class="result-line" v-for="item in infos" :key="item.label">
-                <span class="result-label">{{ item.label }}</span>
-                <span class="result-value" :class="{'error-value': item.error}" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
-            </div>
+            <template v-for="item in infos">
+                <div class="result-line" :key="item.label">
+                    <span class="result-label">{{ item.label }}</span>
+                    <span class="result-value" :class="{'error-value': item.error}" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
+                </div>
+                <!-- APP token 下方：单独查托管（托管获取失败时在校务 token 下方可重试） -->
+                <div class="result-line" v-if="showTrusteeBtn(item)" :key="item.label + '-btn'">
+                    <span class="result-label"></span>
+                    <button class="btn btn-outline-primary btn-sm" :disabled="trusteeLoading" @click="queryTrustee">
+                        {{ trusteeLoading ? '查询中...' : (item.label === 'APP token' ? '查托管' : '重新查托管') }}
+                    </button>
+                </div>
+            </template>
         </div>
     </div>
 </template>
@@ -51,6 +60,9 @@
                 username: '',
                 infos: [],
                 loading: false,
+                trusteeLoading: false,
+                // 当前结果对应的账号与环境（查托管用它，不受输入框后续修改影响）
+                queried: {username: '', env: ''},
                 accountGroups: [
                     {env: 'test', label: '测试', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminqa9515']},
                     {env: 'pre', label: '预发布', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminxswrr']},
@@ -61,7 +73,7 @@
         methods:{
             // 右侧常用账号点击：切换环境+填用户名，直接触发查询
             quickQuery(env, username){
-                if (this.loading) {
+                if (this.loading || this.trusteeLoading) {
                     return;
                 }
                 this.env = env;
@@ -69,25 +81,66 @@
                 this.run();
             },
             run(){
+                if (this.loading || this.trusteeLoading) {
+                    return;
+                }
                 if (!this.username.trim()) {
                     alert('请输入用户名');
                     return;
                 }
                 this.loading = true;
+                const queried = {username: this.username.trim(), env: this.env};
                 api.post('/run_tool/', {
                     tool_key: 'user_info',
-                    params: {username: this.username.trim(), env: this.env}
+                    params: queried
                 }).then(res=>{
-                    // 业务失败（如 dim 登录都失败）：后端返回 code:-1，提示原因
-                    if (res.data.code === -1) {
-                        alert(res.data.message);
-                        this.loading = false;
-                        return;
-                    }
                     this.infos = res.data.data.infos || [];
+                    this.queried = queried;
                     this.loading = false;
                 }).catch(()=>{
                     this.loading = false;
+                })
+            },
+            // 按钮只出现一次：尚未查过托管时挂在 APP token 下；查过但失败时挂在校务 token 报错条目下
+            showTrusteeBtn(item){
+                if (item.label === '校务 token') {
+                    return !!item.error;
+                }
+                const hasTrustee = this.infos.some(i => i.label === '校务 token');
+                return item.label === 'APP token' && !item.error && !hasTrustee;
+            },
+            // 查托管：拿到校务 token → 顶替 APP token（取托管会让英语 token 可能失效，不再展示）；
+            // 失败 → 保留 APP token，只刷新校务 token 报错条目；无托管 → 提示
+            queryTrustee(){
+                if (this.trusteeLoading) {
+                    return;
+                }
+                this.trusteeLoading = true;
+                const queried = this.queried;
+                api.post('/run_tool/', {
+                    tool_key: 'user_info',
+                    params: {...queried, action: 'trustee'}
+                }).then(res=>{
+                    this.trusteeLoading = false;
+                    // 等待期间已换账号重查，这次结果作废
+                    if (queried !== this.queried) {
+                        return;
+                    }
+                    const data = res.data.data;
+                    if (!data.has_trustee) {
+                        alert(`${queried.username} 没有托管学校`);
+                        return;
+                    }
+                    const fresh = data.infos || [];
+                    const ok = fresh.some(i => i.label === '校务 token' && !i.error);
+                    const first = this.infos.findIndex(i => i.label === 'APP token' || i.label.startsWith('校务 token'));
+                    const rest = this.infos.filter(i => !(i.label.startsWith('校务 token') || (ok && i.label === 'APP token')));
+                    const appAt = rest.findIndex(i => i.label === 'APP token');
+                    const at = ok ? (first < 0 ? rest.length : first) : (appAt < 0 ? rest.length : appAt + 1);
+                    rest.splice(at, 0, ...fresh);
+                    this.infos = rest;
+                }).catch(()=>{
+                    this.trusteeLoading = false;
                 })
             },
             copy(value){

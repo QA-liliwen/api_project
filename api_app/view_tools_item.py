@@ -40,6 +40,8 @@ def run_tool(request):
         data = json.loads(request.body)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({"code": -1, "message": "请求体不是合法 JSON"})
+    if not isinstance(data, dict):
+        return JsonResponse({"code": -1, "message": "请求体必须是 JSON 对象"})
 
     tool_key = data.get('tool_key', '')
     if not tool_key:
