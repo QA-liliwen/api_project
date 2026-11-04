@@ -74,6 +74,8 @@ def dispatch_run(data):
     type2_ids = [item.id for item in test_items if item.type == 2]
 
     base_url = data.get('base_url', 'http://172.16.2.60:8000')
+    # 本地执行与平台同机，回调固定走 127.0.0.1，避免本机内网 IP 变动后结果回填失败（状态卡在 running）
+    local_base_url = 'http://127.0.0.1:8000'
     results = []
 
     env_id = data.get('env_id')
@@ -179,7 +181,7 @@ def dispatch_run(data):
             test_run.save()
             results.append({"type": 1, "run_id": test_run.id, "jenkins_build_url": jenkins_url})
         else:
-            run_single_local(test_run, cases_txt_path, sql_conn, run_header_text)
+            run_single_local(test_run, cases_txt_path, sql_conn, run_header_text, local_base_url)
             results.append({"type": 1, "run_id": test_run.id})
 
     # 执行多接口脚本
@@ -201,7 +203,7 @@ def dispatch_run(data):
         if run_mode == 'jenkins':
             resp, status = run_custom_jenkins(type2_ids, description, base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
         else:
-            resp, status = run_custom(type2_ids, description, base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
+            resp, status = run_custom(type2_ids, description, local_base_url, env=env_name, script_vars=script_vars, run_header=run_header_text)
         if status != 200:
             return resp, status
         # 变量字典存档到固定目录（重要比对数据，与 single_cases 下的用例文件对应）
