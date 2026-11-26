@@ -15,10 +15,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.shortcuts import render
 from django.urls import path, re_path
-from django.views.generic import TemplateView
+from django.views.decorators.cache import never_cache
 from api_app.views_test_item import *
 from api_app.view_tools_item import *
+
+
+# 前端入口不缓存：构建产物文件名带哈希，入口若被浏览器缓存会一直加载旧版本脚本
+@never_cache
+def spa_index(request):
+    return render(request, 'index.html')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -49,5 +56,5 @@ urlpatterns = [
     path('get_tools/', get_tools),  # 工具箱工具列表
     path('run_tool/', run_tool),  # 工具统一执行入口
 
-    re_path(r'^.*$', TemplateView.as_view(template_name='index.html')),  # Vue 前端路由兜底
+    re_path(r'^.*$', spa_index),  # Vue 前端路由兜底
 ]

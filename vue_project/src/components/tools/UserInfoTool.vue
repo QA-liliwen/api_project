@@ -20,7 +20,7 @@
             <label>用户名</label>
             <input class="form-control form-control-sm" style="width: 320px" v-model="username"
                    placeholder="输入用户名，一次拿全多系统信息" @keyup.enter="run">
-            <button class="btn btn-primary btn-sm" style="margin-left: 15px" :disabled="loading || trusteeLoading" @click="run">
+            <button class="btn btn-primary btn-sm" style="margin-left: 15px" :disabled="loading || !!switching" @click="run">
                 {{ loading ? '查询中...' : '查询' }}
             </button>
         </div>
@@ -32,20 +32,42 @@
                   @click="quickQuery(group.env, acc)">{{ acc }}</span>
         </div>
 
-        <div class="result-box" v-if="infos.length">
-            <template v-for="item in infos">
-                <div class="result-line" :key="item.label">
-                    <span class="result-label">{{ item.label }}</span>
-                    <span class="result-value" :class="{'error-value': item.error}" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
-                </div>
-                <!-- APP token 下方：单独查托管（托管获取失败时在校务 token 下方可重试） -->
-                <div class="result-line" v-if="showTrusteeBtn(item)" :key="item.label + '-btn'">
-                    <span class="result-label"></span>
-                    <button class="btn btn-outline-primary btn-sm" :disabled="trusteeLoading" @click="queryTrustee">
-                        {{ trusteeLoading ? '查询中...' : (item.label === 'APP token' ? '查托管' : '重新查托管') }}
+        <div class="result-box" v-if="infos.length || campusGroups.length">
+            <div class="result-line" v-for="item in infos" :key="item.key || item.label">
+                <span class="result-label">{{ item.label }}</span>
+                <span class="result-value" :class="{'error-value': item.error}" title="点击复制" @click="copy(item.value)">{{ item.value }}</span>
+            </div>
+            <div class="result-line" v-if="canSwitch && campuses.length">
+                <span class="result-label"></span>
+                <div class="d-flex flex-wrap gap-2">
+                    <button v-for="campus in campuses" :key="campus.key" class="btn btn-outline-primary btn-sm"
+                            :disabled="!!switching || campus.current" @click="switchCampus(campus)">
+                        {{ switching === campus.key ? '切换中...' : (campus.current ? '当前是' : '切换到') + campus.label }}
                     </button>
                 </div>
-            </template>
+            </div>
+            <section v-for="campus in campusGroups" :key="campus.key" class="border-top pt-3 mt-3">
+                <div class="result-line">
+                    <span class="result-label">{{ campus.label }}校长 Token</span>
+                    <span v-if="campus.error" class="text-danger">{{ campus.error }}</span>
+                    <span v-else class="result-value" title="点击复制" @click="copy(campus.principal_token)">{{ campus.principal_token }}</span>
+                </div>
+                <div class="result-line">
+                    <span class="result-label"></span>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button v-for="role in exampleRoles" :key="role.key" class="btn btn-outline-primary btn-sm"
+                                :disabled="!canSwitch || !!switching || !campus.can_switch_role" @click="switchRole(campus, role)">
+                            {{ switching === `${campus.key}:${role.key}` ? '切换中...' : '切' + role.label }}
+                        </button>
+                    </div>
+                </div>
+                <template v-for="role in exampleRoles">
+                    <div v-if="campus.role_tokens[role.key]" :key="role.key" class="result-line">
+                        <span class="result-label">{{ role.label }} Token</span>
+                        <span class="result-value" title="点击复制" @click="copy(campus.role_tokens[role.key])">{{ campus.role_tokens[role.key] }}</span>
+                    </div>
+                </template>
+            </section>
         </div>
     </div>
 </template>
@@ -60,20 +82,29 @@
                 username: '',
                 infos: [],
                 loading: false,
-                trusteeLoading: false,
-                // 当前结果对应的账号与环境（查托管用它，不受输入框后续修改影响）
-                queried: {username: '', env: ''},
+                switching: '',
+                queried: null,
+                contextId: '',
+                campuses: [],
+                campusGroups: [],
+                exampleRoles: [{key: 'teacher', label: '老师'}, {key: 'student', label: '学生'}],
                 accountGroups: [
-                    {env: 'test', label: '测试', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminqa9515']},
+                    {env: 'test', label: '测试', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminttss']},
                     {env: 'pre', label: '预发布', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminxswrr']},
                     {env: 'prod', label: '生产', accounts: ['adminexam', 'admincontent', 'adminzhihui', 'adminvswrr', 'adminfmf', 'adminlsllw']},
                 ],
             }
         },
+        computed: {
+            canSwitch(){
+                return !this.loading && !!this.contextId && this.queried &&
+                    this.queried.username === this.username.trim() && this.queried.env === this.env;
+            }
+        },
         methods:{
             // 右侧常用账号点击：切换环境+填用户名，直接触发查询
             quickQuery(env, username){
-                if (this.loading || this.trusteeLoading) {
+                if (this.loading || this.switching) {
                     return;
                 }
                 this.env = env;
@@ -81,7 +112,7 @@
                 this.run();
             },
             run(){
-                if (this.loading || this.trusteeLoading) {
+                if (this.loading || this.switching) {
                     return;
                 }
                 if (!this.username.trim()) {
@@ -89,59 +120,53 @@
                     return;
                 }
                 this.loading = true;
+                this.infos = [];
+                this.campuses = [];
+                this.campusGroups = [];
+                this.contextId = '';
                 const queried = {username: this.username.trim(), env: this.env};
+                const config = /^admin/i.test(queried.username) ? {timeout: 120000} : {};
                 api.post('/run_tool/', {
                     tool_key: 'user_info',
                     params: queried
-                }).then(res=>{
-                    this.infos = res.data.data.infos || [];
+                }, config).then(({data: {data}})=>{
+                    this.infos = data.infos || [];
+                    this.campuses = data.campuses || [];
+                    this.campusGroups = data.campus_groups || [];
+                    this.contextId = data.context_id || '';
                     this.queried = queried;
+                }).catch(()=>{}).finally(()=>{
                     this.loading = false;
-                }).catch(()=>{
-                    this.loading = false;
-                })
+                });
             },
-            // 按钮只出现一次：尚未查过托管时挂在 APP token 下；查过但失败时挂在校务 token 报错条目下
-            showTrusteeBtn(item){
-                if (item.label === '校务 token') {
-                    return !!item.error;
-                }
-                const hasTrustee = this.infos.some(i => i.label === '校务 token');
-                return item.label === 'APP token' && !item.error && !hasTrustee;
-            },
-            // 查托管：拿到校务 token → 顶替 APP token（取托管会让英语 token 可能失效，不再展示）；
-            // 失败 → 保留 APP token，只刷新校务 token 报错条目；无托管 → 提示
-            queryTrustee(){
-                if (this.trusteeLoading) {
+            switchCampus(campus){
+                if (!this.canSwitch || this.switching || campus.current) {
                     return;
                 }
-                this.trusteeLoading = true;
-                const queried = this.queried;
+                this.switching = campus.key;
                 api.post('/run_tool/', {
                     tool_key: 'user_info',
-                    params: {...queried, action: 'trustee'}
-                }).then(res=>{
-                    this.trusteeLoading = false;
-                    // 等待期间已换账号重查，这次结果作废
-                    if (queried !== this.queried) {
-                        return;
-                    }
-                    const data = res.data.data;
-                    if (!data.has_trustee) {
-                        alert(`${queried.username} 没有托管学校`);
-                        return;
-                    }
-                    const fresh = data.infos || [];
-                    const ok = fresh.some(i => i.label === '校务 token' && !i.error);
-                    const first = this.infos.findIndex(i => i.label === 'APP token' || i.label.startsWith('校务 token'));
-                    const rest = this.infos.filter(i => !(i.label.startsWith('校务 token') || (ok && i.label === 'APP token')));
-                    const appAt = rest.findIndex(i => i.label === 'APP token');
-                    const at = ok ? (first < 0 ? rest.length : first) : (appAt < 0 ? rest.length : appAt + 1);
-                    rest.splice(at, 0, ...fresh);
-                    this.infos = rest;
-                }).catch(()=>{
-                    this.trusteeLoading = false;
-                })
+                    params: {...this.queried, action: 'switch', campus: campus.key, context_id: this.contextId}
+                }).then(({data: {data}})=>{
+                    this.infos = this.infos.filter(item => item.key !== 'app_token').concat(data.infos || []);
+                    this.campuses = data.campuses || [];
+                }).catch(()=>{}).finally(()=>{
+                    this.switching = '';
+                });
+            },
+            switchRole(campus, role){
+                if (!this.canSwitch || this.switching || !campus.can_switch_role) {
+                    return;
+                }
+                this.switching = `${campus.key}:${role.key}`;
+                api.post('/run_tool/', {
+                    tool_key: 'user_info',
+                    params: {...this.queried, action: 'switch_role', campus: campus.key, role: role.key, context_id: this.contextId}
+                }, {timeout: 45000}).then(({data: {data}})=>{
+                    this.campusGroups = data.campus_groups || [];
+                }).catch(()=>{}).finally(()=>{
+                    this.switching = '';
+                });
             },
             copy(value){
                 const el = document.createElement('textarea');
@@ -221,7 +246,7 @@
         margin-bottom: 0;
     }
     .result-label{
-        width: 120px;
+        width: 160px;
         color: #888;
         flex-shrink: 0;
         line-height: 26px;

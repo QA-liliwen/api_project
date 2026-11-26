@@ -3,6 +3,7 @@
 
 # tool_key -> handler
 TOOL_REGISTRY = {}
+SESSION_TOOL_KEYS = set()
 
 
 # 工具业务异常，由视图层统一转成 code:-1 响应
@@ -11,11 +12,13 @@ class ToolError(Exception):
 
 
 # 把工具入口函数登记到全局注册表
-def register_tool(tool_key):
+def register_tool(tool_key, *, uses_session=False):
     def wrapper(func):
         if tool_key in TOOL_REGISTRY:
             raise RuntimeError(f"工具 key 重复注册: {tool_key}")
         TOOL_REGISTRY[tool_key] = func
+        if uses_session:
+            SESSION_TOOL_KEYS.add(tool_key)
         return func
     return wrapper
 

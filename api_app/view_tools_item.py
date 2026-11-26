@@ -49,7 +49,7 @@ def run_tool(request):
 
     # 工具内部异常统一转成错误响应，不把 500 抛给前端
     try:
-        result = dispatch_tool(tool_key, data.get('params') or {})
+        result = dispatch_tool(tool_key, data.get('params') or {}, session=request.session)
     except ToolError as e:
         return JsonResponse({"code": -1, "message": str(e)})
     except Exception as e:

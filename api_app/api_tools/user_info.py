@@ -1,8 +1,10 @@
 import base64
 import json
 import os
+import re
 import time
 from datetime import datetime
+from uuid import uuid4
 
 import requests
 import urllib3
@@ -177,22 +179,35 @@ ENV_CONFIG = {
 
 # 各环境托管集群 serverId（用户定案）：courses 节点 serverId 命中即视为托管校区
 TRUSTEE_SERVER_IDS = {
-    'test': {'1203', '1206'},
+    'test': {'1208'},
     'pre': {'1004'},
     'prod': {'112'},
 }
+MATH_SERVER_IDS = {'test': {'1206'}}
 
 
 # 从登录响应 courses 中找托管校区节点：courseType=after_school_care 或 serverId 命中当前环境托管集合
 # 两条都命中的排最前（pre 的 1004 同时属于商学院，靠 courseType 区分出真托管），其余保持原顺序
 # env: test / pre / prod
 def find_trustee_courses(courses, env):
-    sids = TRUSTEE_SERVER_IDS.get(env, set())
+    return find_campus_courses(courses, env, 'trustee')
+
+
+def find_campus_courses(courses, env, role):
+    trustee_ids = TRUSTEE_SERVER_IDS.get(env, set())
+    math_ids = MATH_SERVER_IDS.get(env, set())
+    course_type, sids, excluded_ids = (
+        ('after_school_care', trustee_ids, math_ids) if role == 'trustee'
+        else ('math', math_ids, trustee_ids if env == 'test' else set())
+    )
     scored = []
     for c in courses or []:
         if not isinstance(c, dict):
             continue
-        score = (str(c.get('courseType')) == 'after_school_care') + (str(c.get('serverId') or '') in sids)
+        sid = str(c.get('serverId') or '')
+        if sid in excluded_ids:
+            continue
+        score = (str(c.get('courseType')) == course_type) + (sid in sids)
         if score:
             scored.append((score, c))
     scored.sort(key=lambda x: -x[0])
@@ -303,9 +318,8 @@ def _session_headers(cur_token, cur_inst_id, cur_server_id, cur_user_id, app_ser
 
 # switch 跨身份切换（抓包 #16 复刻）：header/RU 声明「当前身份」，URL 参数指向「目标身份」→ 返回目标身份 token
 # ⚠ instid/serverid/RU 必须是当前身份；误传目标身份 → -1001 登录失效
-# 返回 (token, 失败原因)：成功时原因为 None；失败原因带服务端 code/message，供上层汇总展示
-def switch_to_trustee(cur_token, cur_inst_id, cur_server_id, cur_user_id,
-                      app_server, username, tgt_inst_id, tgt_user_id):
+def switch_account(cur_token, cur_inst_id, cur_server_id, cur_user_id,
+                   app_server, username, tgt_inst_id, tgt_user_id):
     if not all([cur_token, cur_inst_id, cur_server_id, cur_user_id, tgt_inst_id, tgt_user_id]):
         return None, '当前/目标身份信息不全'
     try:
@@ -322,7 +336,7 @@ def switch_to_trustee(cur_token, cur_inst_id, cur_server_id, cur_user_id,
         return None, f'请求异常 {e}'
     if str(body.get('code')) != '0' or not body.get('token'):
         return None, f"{body.get('code')} {body.get('message') or '响应无 token'}"
-    return body['token'], None
+    return body, None
 
 
 # 目标机构下本账号的真实身份列表（App 切换前先调此接口拿 userId，2026-11-04 抓包复刻）
@@ -353,18 +367,34 @@ def list_inst_accounts(cur_token, cur_inst_id, cur_server_id, cur_user_id, app_s
 # 返回 (token, 失败原因)：成功时原因为 None；失败时汇总 accounts 与每个 userId 的 switch 结果
 # （如 -1001 会话失效 / -2022 用户不存在），不再静默吞掉
 def switch_to_trustee_inst(pdata, app_server, username, tgt_inst_id, tgt_user_id):
+    data, err = switch_to_campus(pdata, app_server, username, tgt_inst_id, tgt_user_id)
+    return (data['token'], None) if data else (None, err)
+
+
+def _app_identity(pdata):
     u = pdata.get('user') or {}
-    cur = (str(pdata.get('token') or ''), str(u.get('instId') or ''),
-           str(u.get('serverId') or ''), str(u.get('userId') or ''))
+    return (str(pdata.get('token') or ''), str(u.get('instId') or ''),
+            str(u.get('serverId') or ''), str(u.get('userId') or ''))
+
+
+def switch_to_campus(pdata, app_server, username, tgt_inst_id, tgt_user_id, *, target_role=None):
+    cur = _app_identity(pdata)
     accounts, acc_err = list_inst_accounts(*cur, app_server, username, tgt_inst_id)
     fails = [acc_err] if acc_err else []
-    uids = [str(a['userId']) for a in accounts] + [str(tgt_user_id or '')]
+    fallback = str(tgt_user_id or '')
+    if target_role:
+        eligible = [a for a in accounts if a.get('role') in (None, '', target_role)
+                    and str(a.get('enabled')).lower() != 'false']
+        if any(str(a['userId']) == fallback and a not in eligible for a in accounts):
+            fallback = ''
+        accounts = eligible
+    uids = [str(a['userId']) for a in accounts] + [fallback]
     for uid in dict.fromkeys(uids):
         if not uid:
             continue
-        token, err = switch_to_trustee(*cur, app_server, username, tgt_inst_id, uid)
-        if token:
-            return token, None
+        data, err = switch_account(*cur, app_server, username, tgt_inst_id, uid)
+        if data:
+            return data, None
         fails.append(f'switch {uid}: {err}')
     return None, '；'.join(fails) or '无可切换的目标身份'
 
@@ -550,15 +580,259 @@ def app_login(username, password, app_server):
     return data
 
 
+CAMPUS_NAMES = {'math': '数学校区', 'trustee': '托管校区'}
+CAMPUS_TOKEN_LABELS = {'main': '主校区 token', 'math': '数学 token', 'trustee': '校务 token'}
+CAMPUS_SESSION_KEY = 'user_info_campus'
+CAMPUS_SESSION_TTL = 15 * 60
+PRINCIPAL_ROLE = 'groupAdmin'
+EXAMPLE_ROLES = {'teacher': 'groupTeacher', 'student': 'groupMember'}
+EXAMPLE_LABELS = {'teacher': '老师', 'student': '学生'}
+
+
+def get_app_profile(pdata, app_server, username):
+    cur = _app_identity(pdata)
+    if not all(cur):
+        raise ToolError('密码登录未返回完整的当前身份')
+    # MyProfile 走登录响应给出的当前校区服务器；查账号和切换仍走环境的认证服务器。
+    server = pdata.get('server') or {}
+    host = str(server.get('domain') or server.get('ip') or '').lower()
+    if not re.fullmatch(r'[a-z0-9-]+\.51tyty\.com', host):
+        host = app_server
+    try:
+        response = requests.get(
+            f'https://{host}/user/services/rest/user/MyProfile',
+            params={'serino': int(time.time() * 1000) % 1000000},
+            headers=_session_headers(*cur, host, username),
+            timeout=15,
+            verify=False,
+            allow_redirects=False,
+        )
+        body = response.json()
+    except (requests.RequestException, ValueError) as e:
+        raise ToolError(f'查询校区身份失败：{e}') from e
+    if not isinstance(body, dict) or str(body.get('code')) != '0':
+        code = body.get('code') if isinstance(body, dict) else '无业务状态码'
+        raise ToolError(f'查询校区身份失败（{code}）')
+    return body
+
+
+def _campus_identity(data):
+    return {key: str(data.get(key) or '') for key in ('instId', 'serverId', 'userId')}
+
+
+def _same_campus(current, target):
+    return bool(target['instId'] and current['instId'] == target['instId'] and
+                (not target['serverId'] or current['serverId'] == target['serverId']))
+
+
+def _make_campus_state(env, username, app_data, profile):
+    current = _campus_identity(app_data.get('user') or {})
+    courses = profile.get('courses') or []
+    targets = {}
+    role = ''
+    for key in CAMPUS_NAMES:
+        candidates = [c for c in find_campus_courses(courses, env, key) if c.get('instId')]
+        active = next((c for c in candidates if _same_campus(current, _campus_identity(c))), None)
+        if candidates:
+            targets[key] = _campus_identity(active or candidates[0])
+        if active or find_campus_courses([current], env, key):
+            role = key
+    if any(str(s.get('isMainSchool')).lower() == 'true' and _same_campus(current, _campus_identity(s))
+           for s in profile.get('schoolsAndCourses') or [] if isinstance(s, dict)):
+        role = 'main'
+    return {
+        'id': uuid4().hex, 'env': env, 'username': username,
+        'expires': time.time() + CAMPUS_SESSION_TTL, 'role': role, 'targets': targets,
+        'current': {'token': app_data['token'], 'user': current},
+    }
+
+
+def _campus_result(state, *, include_context=True):
+    current = state['current']
+    return {
+        'infos': [{
+            'key': 'app_token',
+            'label': CAMPUS_TOKEN_LABELS.get(state['role'], '当前校区 token'),
+            'value': current['token'],
+        }],
+        'campuses': [
+            {'key': role, 'label': CAMPUS_NAMES[role], 'current': _same_campus(current['user'], target)}
+            for role, target in state['targets'].items()
+        ] if include_context else [],
+        'context_id': state['id'] if include_context else '',
+    }
+
+
+def _role_session(data, username):
+    user = data.get('user') or {}
+    return {
+        'token': data['token'],
+        'user': {**_campus_identity(user), 'username': user.get('username') or username},
+    }
+
+
+def _collect_principal_campuses(state, app_data, app_server):
+    username = state['username']
+    login = _role_session(app_data, username)
+    targets = state['targets']
+    matched = next((key for key, target in targets.items() if _same_campus(login['user'], target)), None)
+    if matched is None and state['env'] == 'test':
+        matched = next((key for key in CAMPUS_NAMES
+                        if find_campus_courses([login['user']], state['env'], key)), None)
+    label = f'默认校区（{CAMPUS_NAMES[matched]}）' if matched else '默认校区'
+    groups = [{'key': 'default', 'label': label, 'principal': login, 'active': login, 'role_tokens': {}}]
+    current = login
+    if matched == 'trustee' and all(_app_identity(login)):
+        save_platform_token(login['user']['instId'], login['user']['userId'], login['token'])
+
+    # 仅用同一次密码登录的会话逐校区切换；失败时保留已拿到的校区。
+    for key, name in CAMPUS_NAMES.items():
+        target = targets.get(key)
+        if (key == matched or not target
+                or any(_same_campus(g['principal']['user'], target) for g in groups if 'principal' in g)):
+            continue
+        group = {'key': key, 'label': name, 'role_tokens': {}}
+        groups.append(group)
+        data, err = switch_to_campus(current, app_server, username, target['instId'], target['userId'],
+                                     target_role=PRINCIPAL_ROLE)
+        if not data:
+            group['error'] = f'获取校长 Token 失败：{err}'
+            continue
+        principal = _role_session(data, username)
+        if (not all(_app_identity(principal)) or not _same_campus(principal['user'], target)
+                or (data.get('user') or {}).get('role') != PRINCIPAL_ROLE):
+            group['error'] = '切换响应未返回目标校区的校长身份'
+            continue
+        group.update(principal=principal, active=principal)
+        current = principal
+        if key == 'trustee':
+            save_platform_token(principal['user']['instId'], principal['user']['userId'], principal['token'])
+    state['campus_groups'] = groups
+    state['expires'] = time.time() + CAMPUS_SESSION_TTL
+
+
+def _principal_campus_result(state, *, include_context):
+    groups = []
+    for group in state['campus_groups']:
+        principal = group.get('principal') or {}
+        groups.append({
+            'key': group['key'], 'label': group['label'],
+            'principal_token': principal.get('token', ''),
+            'error': group.get('error', ''),
+            'can_switch_role': include_context and all(_app_identity(principal)),
+            'role_tokens': group['role_tokens'],
+        })
+    return {'infos': [], 'campuses': [], 'campus_groups': groups,
+            'context_id': state['id'] if include_context else ''}
+
+
+def _example_request(method, app_server, path, current, principal_token):
+    cur = _app_identity(current)
+    if not all(cur):
+        raise ToolError('校区会话身份不完整，请重新查询账号')
+    headers = _session_headers(*cur, app_server, current['user']['username'])
+    try:
+        response = requests.request(
+            method, f'https://{app_server}/center/services/rest/auth/example/{path}',
+            params={'serino': int(time.time() * 1000) % 1000000, 'token': principal_token},
+            headers=headers, data=b'' if method == 'PUT' else None,
+            timeout=10, allow_redirects=False,
+        )
+        body = response.json()
+    except (requests.RequestException, ValueError):
+        # 请求 URL 含校长 Token，不把底层异常或响应原文返回给页面。
+        raise ToolError('示例角色接口请求失败，请稍后重试') from None
+    code = str(body.get('code')) if isinstance(body, dict) else ''
+    if code == '-1001':
+        raise ToolError('该校区会话已失效，请重新查询账号')
+    if response.status_code != 200 or code != '0':
+        suffix = f'（{code}）' if code.lstrip('-').isdigit() else ''
+        raise ToolError(f'示例角色接口返回失败{suffix}')
+    return body
+
+
+def _switch_example_role(params, session, env, username, app_server):
+    campus = get_choice_param(params, 'campus', ('default', *CAMPUS_NAMES))
+    role = get_choice_param(params, 'role', tuple(EXAMPLE_ROLES))
+    state = _load_campus_state(params, session, env, username)
+    group = next((g for g in state.get('campus_groups', []) if g['key'] == campus), None)
+    if not group or not group.get('principal'):
+        raise ToolError('该校区没有可用于切换角色的校长 Token')
+    principal, current = group['principal'], group['active']
+    inst_id = principal['user']['instId']
+    query_token = principal['token']
+    candidates = _example_request('GET', app_server, 'accounts', current, query_token).get('accounts') or []
+    account = next((a for a in candidates if isinstance(a, dict)
+                    and str(a.get('instId')) == inst_id and a.get('role') == EXAMPLE_ROLES[role]
+                    and str(a.get('enabled')).lower() == 'true'
+                    and re.fullmatch(r'[0-9]+', str(a.get('userId') or ''))), None)
+    if not account or not re.fullmatch(r'[0-9]+', inst_id):
+        raise ToolError(f'该校区没有可切换的{EXAMPLE_LABELS[role]}示例账号')
+    user_id = str(account['userId'])
+    data = _example_request('PUT', app_server, f'account/switch/{inst_id}/{user_id}', current, query_token)
+    user = data.get('user') or {}
+    identity = _campus_identity(user)
+    if (not data.get('token') or not _same_campus(identity, principal['user'])
+            or identity['userId'] != user_id or user.get('role') != EXAMPLE_ROLES[role]):
+        raise ToolError('切换响应的校区或角色与目标不一致')
+    group['active'] = _role_session(data, account.get('username') or username)
+    group['role_tokens'][role] = data['token']
+    state['expires'] = time.time() + CAMPUS_SESSION_TTL
+    session[CAMPUS_SESSION_KEY] = state
+    return _principal_campus_result(state, include_context=True)
+
+
+def _load_campus_state(params, session, env, username):
+    context_id = get_str_param(params, 'context_id')
+    state = session.get(CAMPUS_SESSION_KEY) if session is not None else None
+    if not state or (state['id'], state['env'], state['username']) != (context_id, env, username):
+        raise ToolError('查询会话已失效，请重新查询账号')
+    if state['expires'] <= time.time():
+        session.pop(CAMPUS_SESSION_KEY, None)
+        raise ToolError('查询会话已过期，请重新查询账号')
+    return state
+
+
+def _switch_campus(params, session, env, username, app_server):
+    role = get_choice_param(params, 'campus', tuple(CAMPUS_NAMES))
+    state = _load_campus_state(params, session, env, username)
+    if 'campus_groups' in state:
+        raise ToolError('校区 Token 已一次性获取，请在对应校区下切换角色')
+    target = state['targets'].get(role)
+    if not target:
+        raise ToolError(f'当前账号没有可切换的{CAMPUS_NAMES[role]}')
+    if _same_campus(state['current']['user'], target):
+        return _campus_result(state)
+
+    data, err = switch_to_campus(state['current'], app_server, username, target['instId'], target['userId'])
+    if not data:
+        raise ToolError(f'切换{CAMPUS_NAMES[role]}失败：{err}。如果当前会话失效，请重新查询账号')
+    current = _campus_identity(data.get('user') or {})
+    if not all(current.values()) or not _same_campus(current, target):
+        session.pop(CAMPUS_SESSION_KEY, None)
+        raise ToolError('切换响应的身份与目标校区不一致，请重新查询账号')
+    state['current'] = {'token': data['token'], 'user': current}
+    state['role'] = role
+    state['expires'] = time.time() + CAMPUS_SESSION_TTL
+    session[CAMPUS_SESSION_KEY] = state
+    if role == 'trustee':
+        save_platform_token(current['instId'], current['userId'], data['token'])
+    return _campus_result(state)
+
+
 # ==================== 输入用户名（code），串联多个系统返回用户信息合集 ====================
-# action：all = 查 OSS 信息 + APP（英语）token；trustee = 只查托管校务 token（前端「查托管」按钮单独触发）
-# 两者分开：取托管要再登录 + switch，会话复用下可能让刚取到的英语 token 在部分服务上失效
-@register_tool('user_info')
-def run(params):
+@register_tool('user_info', uses_session=True)
+def run(params, *, session=None):
     username = get_str_param(params, 'username').strip()
     env = get_choice_param(params, 'env', tuple(ENV_CONFIG), default='test')
-    action = get_choice_param(params, 'action', ('all', 'trustee'), default='all')
+    action = get_choice_param(params, 'action', ('all', 'switch', 'switch_role'), default='all')
     config = ENV_CONFIG[env]
+    if action == 'switch_role':
+        return _switch_example_role(params, session, env, username, config['app_server'])
+    if action == 'switch':
+        return _switch_campus(params, session, env, username, config['app_server'])
+    if session is not None:
+        session.pop(CAMPUS_SESSION_KEY, None)
 
     infos = []
 
@@ -616,57 +890,6 @@ def run(params):
             infos.append({"label": fail_label, "value": f"获取失败: {e}", "error": True})
             return None
 
-    # 托管校区取 token：先看登录沾光（登录 token 已是托管身份直接用）；主校区状态时
-    # 走 password_login + switch 跨身份切换（header/RU 声明当前身份，URL 指向目标身份）
-    def fetch_trustee_token(inst, app_token):
-        tgt_uid = str(inst.get('userId') or '')
-        tgt_iid = str(inst.get('instId') or '')
-        if is_trustee_token(app_token, inst):
-            save_platform_token(tgt_iid, tgt_uid, app_token)
-            infos.append({"label": "校务 token", "value": app_token})
-            return
-        # 慢路径密码：固定密码优先，未收录回落临时密码（懒申请）；why 记录失败原因，兜底/报错时一并展示
-        rec, why = None, None
-        pw = fixed_pw
-        if not pw:
-            st = ensure_temp_pw()
-            pw = st.get('password') if not st.get('error') else None
-            if not pw:
-                why = f"无可用密码（{st.get('error')}）"
-        if not tgt_iid:
-            why = '托管节点缺少 instId'
-        elif pw:
-            try:
-                pdata = password_login(username, pw, config['app_server'])
-                rec, why = switch_to_trustee_inst(pdata, config['app_server'], username, tgt_iid, tgt_uid)
-            except ToolError as e:
-                why = f'密码登录失败：{e}'
-        if rec:
-            save_platform_token(tgt_iid, tgt_uid, rec)
-            infos.append({"label": "校务 token", "value": rec})
-            return
-        # 备用兜底：本地平台缓存 与 Charles Mirror 取时间较近者（非实时）
-        tok, src, ts = read_trustee_token_fallback(tgt_iid, tgt_uid)
-        if tok:
-            save_platform_token(tgt_iid, tgt_uid, tok)
-            infos.append({"label": "校务 token", "value": tok})
-            infos.append({"label": "校务 token 备注",
-                          "value": f"自动切换失败（{why}），改用{src}备用 token（非实时调用），获取时间 {ts}"})
-        else:
-            infos.append({"label": "校务 token",
-                          "value": f"未获取到：自动切换失败（{why}）且无备用 token（平台缓存/Charles），请在 App 切到托管校区后重查",
-                          "error": True})
-
-    # 查托管：courses 里找托管校区 → 有则取托管 token（结果只回 校务 token 相关条目），无则 has_trustee=False
-    if action == 'trustee':
-        app_data = system_login(app_login, config['app_server'], '校务 token')
-        if app_data:
-            trustees = find_trustee_courses(app_data.get('courses'), env)
-            if not trustees:
-                return {"infos": [], "has_trustee": False}
-            fetch_trustee_token(trustees[0], app_data.get('token', ''))
-        return {"infos": [i for i in infos if i['label'].startswith('校务 token')], "has_trustee": True}
-
     # 第一步：oss doLogin 拿用户信息与 token
     user_info = system_login(oss_dologin, config['oss_base'], 'OSS 用户信息')
     if user_info:
@@ -674,15 +897,30 @@ def run(params):
         for field in oss_fields:
             infos.append({"label": f"OSS {field}", "value": str(user_info.get(field, ''))})
 
-    # 第二步：app V2 登录拿 app token（key 同样是 L...S 编码，与 oss 独立判断）
-    app_data = system_login(app_login, config['app_server'], 'APP token')
+    result = {'infos': [], 'campuses': [], 'context_id': ''}
+    app_data = system_login(password_login, config['app_server'], 'APP token')
     if app_data:
-        infos.append({"label": "APP token", "value": app_data.get('token', '')})
+        try:
+            profile = get_app_profile(app_data, config['app_server'], username)
+        except ToolError as e:
+            profile = {}
+            infos.append({'label': '校区身份', 'value': str(e), 'error': True})
+        state = _make_campus_state(env, username, app_data, profile)
+        if username.lower().startswith('admin') and (app_data.get('user') or {}).get('role') == PRINCIPAL_ROLE:
+            _collect_principal_campuses(state, app_data, config['app_server'])
+            can_switch = session is not None and any(
+                all(_app_identity(g.get('principal') or {})) for g in state['campus_groups']
+            )
+            result = _principal_campus_result(state, include_context=can_switch)
+        else:
+            can_switch = session is not None and bool(state['targets'])
+            result = _campus_result(state, include_context=can_switch)
+        if can_switch:
+            session[CAMPUS_SESSION_KEY] = state
 
     # 展示顺序固定（未列出的条目排最后，保持原相对顺序）
     display_order = ('OSS userName', '固定密码', 'OSS 临时密码', 'OSS 临时密码备注', 'OSS userId',
-                     'OSS instId', 'OSS instCode', 'OSS token', 'OSS serverId', 'APP token',
-                     '校务 token', '校务 token 备注')
+                     'OSS instId', 'OSS instCode', 'OSS token', 'OSS serverId', 'APP token')
     infos.sort(key=lambda x: display_order.index(x['label']) if x['label'] in display_order else len(display_order))
-
-    return {"infos": infos}
+    result['infos'] = infos + result['infos']
+    return result
