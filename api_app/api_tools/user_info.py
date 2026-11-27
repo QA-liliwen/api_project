@@ -13,6 +13,14 @@ from api_app.api_tools.base import ToolError, register_tool, get_str_param, get_
 
 urllib3.disable_warnings()
 
+
+def _direct_request(method, url, **kwargs):
+    # 只让本模块的上游请求绕过系统代理，不影响手机抓包或进程内其他请求。
+    with requests.Session() as session:
+        session.trust_env = False
+        return session.request(method, url, **kwargs)
+
+
 # dim 系统 admin 账号的加密密码（RSA，固定值，三个环境通用）
 _DIM_ADMIN_PASSWORD = "mooDo0TDAVq418YpRxi7XMe4dBGfGAxk6xorN8FxNOvXBL6bZ9jMvgMj+m4xWX8S7ecPukNWOYPyvmxT+3kzgDSjKIz2eFPvQzTLIp1/HMk1NEWYx8kHE8ftZAGv0H3fLIvSWUfzy6cHkO28uW4I/EnfQbHUEpQbd5ag8bqj6qcEckNK4jn/KrU8rsBPU54WU0PCOHXw84uiTlDZNHbAmGSQg11rSrYkV1vM96AKB3nVbxWiUJ1SVUlC106tM+NPJccyZMkbJaZ1LVSFLiOJfGOaGsHLNGgRXJHNf8yXbaWb8R5kMLZ12jm6dinHWAbuQcMxmA1KH3+BOsQvipD/SQ=="
 
@@ -21,7 +29,8 @@ _DIM_ADMIN_PASSWORD = "mooDo0TDAVq418YpRxi7XMe4dBGfGAxk6xorN8FxNOvXBL6bZ9jMvgMj+
 def get_dim_token(dim_base):
     url = f'{dim_base}/crmsys/login/password'
     try:
-        resp = requests.post(
+        resp = _direct_request(
+            'POST',
             url,
             json={"username": "admin", "password": _DIM_ADMIN_PASSWORD},
             headers={'content-type': 'application/json;charset=UTF-8'},
@@ -229,13 +238,11 @@ def is_trustee_token(token, inst):
 # 登录策略：先用固定密码，失败再回落临时密码；oss 与移动端分开判断，互不影响
 FIXED_PASSWORDS = {
     'test': {
-        # 'adminexam': '888888',
-        'adminqa9515': '405824',
         'adminqwqwqw': '111111',
         'admincontent': '111111',
-        'adminvswrr': '111111',
-        # 'adminlsllw': 'Aa888888',
+        'adminvswrr': 'Aa123456',
         'adminfmf': 'Aa123456',
+        'adminttss': 'Aa111111',
     },
     'pre': {
         'adminexam': 'lingshi0616',
@@ -284,7 +291,8 @@ def password_login(username, password, app_server):
         'requestuniqueid': f'{username}__0_106',
     }
     try:
-        resp = requests.put(
+        resp = _direct_request(
+            'PUT',
             f'https://{app_server}/center/services/rest/auth/password/login?serino=319',
             json={'PasswordLoginArgu': {'loginKey': encode_login_param(username, password)}},
             headers=headers,
@@ -323,7 +331,8 @@ def switch_account(cur_token, cur_inst_id, cur_server_id, cur_user_id,
     if not all([cur_token, cur_inst_id, cur_server_id, cur_user_id, tgt_inst_id, tgt_user_id]):
         return None, '当前/目标身份信息不全'
     try:
-        resp = requests.put(
+        resp = _direct_request(
+            'PUT',
             f'https://{app_server}/center/services/rest/auth/account/switch/{tgt_inst_id}/{tgt_user_id}'
             f'?serino={int(time.time() * 1000) % 1000000}',
             headers=_session_headers(cur_token, cur_inst_id, cur_server_id, cur_user_id, app_server, username),
@@ -347,7 +356,8 @@ def list_inst_accounts(cur_token, cur_inst_id, cur_server_id, cur_user_id, app_s
     if not all([cur_token, cur_inst_id, cur_server_id, cur_user_id, tgt_inst_id]):
         return [], '当前身份信息不全'
     try:
-        resp = requests.get(
+        resp = _direct_request(
+            'GET',
             f'https://{app_server}/center/services/rest/auth/{tgt_inst_id}/accounts'
             f'?serino={int(time.time() * 1000) % 1000000}',
             headers=_session_headers(cur_token, cur_inst_id, cur_server_id, cur_user_id, app_server, username),
@@ -403,7 +413,8 @@ def switch_to_campus(pdata, app_server, username, tgt_inst_id, tgt_user_id, *, t
 def apply_dim_password(code, dim_base, token):
     url = f'{dim_base}/crmsys/login/dynamic/apply'
     try:
-        resp = requests.post(
+        resp = _direct_request(
+            'POST',
             url,
             json={"data": {"code": code}},
             headers={
@@ -504,7 +515,8 @@ def ensure_temp_password(username, env, dim_base, dim_token_getter, force=False)
 def oss_dologin(username, password, oss_base):
     url = f'{oss_base}/schsys/login/doLogin'
     try:
-        resp = requests.post(
+        resp = _direct_request(
+            'POST',
             url,
             json={
                 "method": "account",
@@ -558,7 +570,8 @@ def app_login(username, password, app_server):
         }
     }
     try:
-        resp = requests.put(
+        resp = _direct_request(
+            'PUT',
             f'https://{app_server}/center/services/rest/user/V2/Login?serino=110',
             json=payload,
             headers=headers,
@@ -580,7 +593,7 @@ def app_login(username, password, app_server):
     return data
 
 
-CAMPUS_NAMES = {'math': '数学校区', 'trustee': '托管校区'}
+CAMPUS_NAMES = {'math': '数学', 'trustee': '托管'}
 CAMPUS_TOKEN_LABELS = {'main': '主校区 token', 'math': '数学 token', 'trustee': '校务 token'}
 CAMPUS_SESSION_KEY = 'user_info_campus'
 CAMPUS_SESSION_TTL = 15 * 60
@@ -599,7 +612,8 @@ def get_app_profile(pdata, app_server, username):
     if not re.fullmatch(r'[a-z0-9-]+\.51tyty\.com', host):
         host = app_server
     try:
-        response = requests.get(
+        response = _direct_request(
+            'GET',
             f'https://{host}/user/services/rest/user/MyProfile',
             params={'serino': int(time.time() * 1000) % 1000000},
             headers=_session_headers(*cur, host, username),
@@ -679,7 +693,7 @@ def _collect_principal_campuses(state, app_data, app_server):
     if matched is None and state['env'] == 'test':
         matched = next((key for key in CAMPUS_NAMES
                         if find_campus_courses([login['user']], state['env'], key)), None)
-    label = f'默认校区（{CAMPUS_NAMES[matched]}）' if matched else '默认校区'
+    label = f'默认（{CAMPUS_NAMES[matched]}）' if matched else '默认'
     groups = [{'key': 'default', 'label': label, 'principal': login, 'active': login, 'role_tokens': {}}]
     current = login
     if matched == 'trustee' and all(_app_identity(login)):
@@ -732,7 +746,7 @@ def _example_request(method, app_server, path, current, principal_token):
         raise ToolError('校区会话身份不完整，请重新查询账号')
     headers = _session_headers(*cur, app_server, current['user']['username'])
     try:
-        response = requests.request(
+        response = _direct_request(
             method, f'https://{app_server}/center/services/rest/auth/example/{path}',
             params={'serino': int(time.time() * 1000) % 1000000, 'token': principal_token},
             headers=headers, data=b'' if method == 'PUT' else None,
